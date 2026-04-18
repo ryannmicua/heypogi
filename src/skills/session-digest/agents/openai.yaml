@@ -1,0 +1,8 @@
+interface:
+  display_name: "Session Digest"
+  short_description: "Turn transcripts into LoreSpec compliant session digest"
+  brand_color: "#0F766E"
+  default_prompt: "Extract a LoreSpec-compliant markdown file from this transcript or conversation."
+
+policy:
+  allow_implicit_invocation: true
