@@ -1,0 +1,8 @@
+interface:
+  display_name: "Hey Pogi, install skills"
+  short_description: "Install all repo skills by junction-linking src/skills into ~/.agents/skills."
+  default_prompt: "Install all skills from this repository into ~/.agents/skills using junctions, following the skill rules."
+
+policy:
+  allow_implicit_invocation: true
+

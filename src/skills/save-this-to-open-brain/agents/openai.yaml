@@ -1,0 +1,7 @@
+interface:
+  display_name: "Save This to Open Brain"
+  short_description: "Save user-approved notes to Open Brain when they say Save this."
+  default_prompt: "Save this thought to Open Brain following the skill rules."
+
+policy:
+  allow_implicit_invocation: true
