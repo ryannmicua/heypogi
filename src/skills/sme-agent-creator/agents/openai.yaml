@@ -1,0 +1,3 @@
+interface:
+  display_name: "SME Agent Creator"
+  short_description: "Creates governed subject matter expert agent specifications."
