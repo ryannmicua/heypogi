@@ -1,0 +1,5 @@
+interface:
+  display_name: "My Writing Voice"
+  short_description: "Drafts prose in your concise, practical work voice."
+  icon: "✉️"
+  brand_color: "#315C7A"
