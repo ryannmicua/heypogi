@@ -1,0 +1,7 @@
+interface:
+  display_name: "Write Handoff"
+  short_description: "Create structured continuation handoffs for fresh threads."
+  default_prompt: "Write a single copy-paste handoff block with Goal, State, Decisions, Paths, Next actions, and Traps."
+
+policy:
+  allow_implicit_invocation: true
