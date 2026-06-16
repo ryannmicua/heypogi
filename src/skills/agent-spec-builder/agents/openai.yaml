@@ -1,0 +1,3 @@
+interface:
+  display_name: "Agent Spec Builder"
+  short_description: "Draft structured specifications for ChatGPT agents."
