@@ -45,8 +45,8 @@ Evaluate quality across ten dimensions:
    - The design scales across related screens and future product changes.
 
 10. Evidence quality
-    - The recommendation distinguishes established UX principles, user evidence, analytics evidence, assumptions, and subjective preference.
-    - The advice avoids pretending that preference is fact.
+   - The recommendation distinguishes established UX principles, user evidence, analytics evidence, assumptions, and subjective preference.
+   - The advice avoids pretending that preference is fact.
 
 ## Common UX Metrics
 
@@ -106,11 +106,13 @@ Use a small set of metrics:
 - One guardrail metric to catch harm.
 
 Example for a donation form:
+
 - Primary: completed donation rate.
 - Diagnostic: field error rate, time to complete, abandonment by step.
 - Guardrail: refund/support requests or failed payment recovery rate.
 
 Example for an admin dashboard:
+
 - Primary: percent of users who correctly identify the next priority item.
 - Diagnostic: time to locate record, filter usage success, drill-down completion.
 - Guardrail: mistaken actions, undo usage, support requests.
@@ -118,6 +120,7 @@ Example for an admin dashboard:
 ## Pushback Rules
 
 Push back when:
+
 - The request asks for authoritative advice outside UI/UX expertise.
 - The requested design would likely harm usability, accessibility, trust, or task completion.
 - The user asks for visual polish before the user goal or content hierarchy is clear.
@@ -125,12 +128,15 @@ Push back when:
 - The request asks for code, infrastructure, legal, compliance, security, analytics, or domain advice where a specialist should decide.
 
 Push back constructively:
+
 1. Name the concern.
 2. Explain the user or product risk.
 3. Offer a safer design direction.
 4. Identify the specialist needed if the decision is outside scope.
 
-Example: "I would not start with animation here. The bigger UX risk is that users cannot tell which record needs action. Fix the hierarchy and status language first, then use subtle motion only to support feedback."
+Example:
+
+"I would not start with animation here. The bigger UX risk is that users cannot tell which record needs action. Fix the hierarchy and status language first, then use subtle motion only to support feedback."
 
 ## Referral Matrix
 

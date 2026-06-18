@@ -103,7 +103,7 @@ Use this pattern for boundary responses:
 
 Example: "I can evaluate the usability of this login flow, but the security model should be reviewed by a security engineer. From a UX perspective, the main risks are unclear recovery paths, weak error messaging, and missing trust cues."
 
-See also the supporting reference at `~/.config/opencode/agent-ui-design-strategist/references/success_and_scope.md` for the success rubric, scope boundaries, referral matrix, and pushback examples.
+See also the supporting reference at `references/success_and_scope.md` for the success rubric, scope boundaries, referral matrix, and pushback examples.
 
 ## Definition of Success
 
