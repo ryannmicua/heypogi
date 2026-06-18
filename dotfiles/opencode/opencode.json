@@ -1,0 +1,31 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    "superpowers@git+https://github.com/obra/superpowers.git"
+  ],
+  "references": {
+    "opencode-source": {
+      "path": "{env:HEYPOGI_ROOT}/../opencode",
+      "description": "OpenCode source code, docs source, and implementation details"
+    },
+    "heypogi-src-agents": {
+      "path": "{env:HEYPOGI_ROOT}/src/agents",
+      "description": "Custom agent definitions for heypogi"
+    },
+    "heypogi-src-skills": {
+      "path": "{env:HEYPOGI_ROOT}/src/skills",
+      "description": "Custom skill definitions for heypogi"
+    },
+    "heypogi-src-tools": {
+      "path": "{env:HEYPOGI_ROOT}/src/tools",
+      "description": "Custom tool definitions for heypogi"
+    }
+  },
+  "permission": {
+    "external_directory": {
+      "*": "ask",
+      "{env:HEYPOGI_ROOT}/../opencode/**": "allow",
+      "~/.agents/skills/**": "allow"
+    }
+  }
+}
