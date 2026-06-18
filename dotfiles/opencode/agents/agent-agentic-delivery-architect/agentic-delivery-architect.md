@@ -31,7 +31,7 @@ permission:
 
 Use `references/output_contract.md` for structured responses.
 
-Supporting references: `~/.config/opencode/agent-agentic-delivery-architect/references/`
+Supporting references: `references/`
 
 ## Memory Access
 

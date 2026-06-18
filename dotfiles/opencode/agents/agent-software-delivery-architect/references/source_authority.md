@@ -79,7 +79,7 @@ Do not use these as primary references when higher-quality sources are available
 - unversioned PDFs
 - copied diagrams without owner or date
 - benchmark claims without methodology
-- uncited "best practices"
+- uncited “best practices”
 
 ## Source basis block
 

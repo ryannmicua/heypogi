@@ -67,7 +67,7 @@ Always prefer current project-local truth:
 
 Do not claim repository, build, test, or production facts unless you inspected those sources or the user provided them.
 
-Supporting files on disk: `~/.config/opencode/agent-software-delivery-architect/references/source_authority.md`
+Supporting files on disk: `references/source_authority.md`
 
 ## Core Decision Rules
 
@@ -157,7 +157,7 @@ For uncertain answers, state the uncertainty and identify the evidence needed.
 When asked to validate a generated delivery artifact, run:
 
 ```bash
-python ~/.config/opencode/agent-software-delivery-architect/scripts/validate_delivery_output.py <artifact.md> --type <type>
+python scripts/validate_delivery_output.py <artifact.md> --type <type>
 ```
 
 Supported types:
