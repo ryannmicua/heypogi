@@ -7,10 +7,10 @@ OpenCode config directory managed via `OPENCODE_CONFIG_DIR`.
 Use the installer script from the repo root:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File install/scripts/install-opencode.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File install/scripts/setup-environment.ps1
 ```
 
-This sets the `OPENCODE_CONFIG_DIR` environment variable (User scope) to point here.
+This sets `HEYPOGI_ROOT` and `OPENCODE_CONFIG_DIR` (User scope).
 
 To set it manually, replace `<repo_root>` with the actual path:
 

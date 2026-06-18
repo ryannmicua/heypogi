@@ -5,26 +5,26 @@
   ],
   "references": {
     "opencode-source": {
-      "path": "{env:HEYPOGI_ROOT}/../opencode",
+      "path": "../../external/opencode",
       "description": "OpenCode source code, docs source, and implementation details"
     },
     "heypogi-src-agents": {
-      "path": "{env:HEYPOGI_ROOT}/src/agents",
+      "path": "../../src/agents",
       "description": "Custom agent definitions for heypogi"
     },
     "heypogi-src-skills": {
-      "path": "{env:HEYPOGI_ROOT}/src/skills",
+      "path": "../../src/skills",
       "description": "Custom skill definitions for heypogi"
     },
     "heypogi-src-tools": {
-      "path": "{env:HEYPOGI_ROOT}/src/tools",
+      "path": "../../src/tools",
       "description": "Custom tool definitions for heypogi"
     }
   },
   "permission": {
     "external_directory": {
       "*": "ask",
-      "{env:HEYPOGI_ROOT}/../opencode/**": "allow",
+      "../../external/opencode/**": "allow",
       "~/.agents/skills/**": "allow"
     }
   }

@@ -53,7 +53,7 @@ $heypogiRoot = [Environment]::GetEnvironmentVariable("HEYPOGI_ROOT", "User")
 $configDir = [Environment]::GetEnvironmentVariable("OPENCODE_CONFIG_DIR", "User")
 
 if (-not $heypogiRoot) {
-  Write-Host "HEYPOGI_ROOT not set in registry. Run install-envvars first." -ForegroundColor Yellow
+  Write-Host "HEYPOGI_ROOT not set in registry. Run setup-environment first." -ForegroundColor Yellow
   exit 1
 }
 

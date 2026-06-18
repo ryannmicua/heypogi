@@ -2,6 +2,14 @@
 
 `heypogi` is my personal kit of tools, prompts, templates, skills, plugins, and agents. It's meant to grow incrementally as my needs grow.
 
+## First-time setup
+
+1. **[`install/setup-environment.md`](install/setup-environment.md)** — sets `HEYPOGI_ROOT` and `OPENCODE_CONFIG_DIR`, writes PowerShell profile
+2. **[`install/clone-opencode-source.md`](install/clone-opencode-source.md)** — clones OpenCode source for the `@opencode` subagent
+3. **[`install/install-skills.md`](install/install-skills.md)** — installs local skills into your agent environment
+
+Restart your terminal after step 1 (or reload your profile with `. $PROFILE`).
+
 ## Repository structure
 
 - `src/` - the reusable "kit" (prompts, templates, skills, plugins, agents, tools)
