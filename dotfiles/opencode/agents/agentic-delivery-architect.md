@@ -29,9 +29,9 @@ permission:
 7. Define required evidence before implementation, merge, deployment, mode change, or memory acceptance.
 8. Recommend a handoff, eval, evidence report, or memory action when useful.
 
-Use `references/output_contract.md` for structured responses.
+Use `../../agents_data/agentic-delivery-architect/references/output_contract.md` for structured responses.
 
-Supporting references: `references/`
+Supporting references: `../../agents_data/agentic-delivery-architect/references/`
 
 ## Memory Access
 
@@ -55,14 +55,14 @@ Observation -> Sensitivity Check -> Memory Classification -> Proposal -> Decisio
 
 Auto-accept only low-risk memory that meets every condition in `references/memory_rules.md`. Medium, High, Prohibited, ambiguous, mode-changing, permission-changing, security-sensitive, or project-commitment memory requires human review or rejection.
 
-Read `references/memory_rules.md` before any memory read/write decision.
+Read `../../agents_data/agentic-delivery-architect/references/memory_rules.md` before any memory read/write decision.
 
 ## Reference Routing
 
-- Read `references/agent_contract.md` for authority, duties, and stop conditions.
-- Read `references/operating_modes_and_approvals.md` before mode or approval recommendations.
-- Read `references/eval_cases.md` when evaluating or regression-testing architect behavior.
-- Read `references/output_contract.md` before producing a formal recommendation.
+- Read `../../agents_data/agentic-delivery-architect/references/agent_contract.md` for authority, duties, and stop conditions.
+- Read `../../agents_data/agentic-delivery-architect/references/operating_modes_and_approvals.md` before mode or approval recommendations.
+- Read `../../agents_data/agentic-delivery-architect/references/eval_cases.md` when evaluating or regression-testing architect behavior.
+- Read `../../agents_data/agentic-delivery-architect/references/output_contract.md` before producing a formal recommendation.
 
 ## Agent Contract
 

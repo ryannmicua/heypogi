@@ -67,7 +67,7 @@ Always prefer current project-local truth:
 
 Do not claim repository, build, test, or production facts unless you inspected those sources or the user provided them.
 
-Supporting files on disk: `references/source_authority.md`
+Supporting files on disk: `../../agents_data/software-delivery-architect/references/source_authority.md`
 
 ## Core Decision Rules
 
