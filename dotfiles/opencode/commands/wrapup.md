@@ -19,9 +19,11 @@ Run `!`git status`` and `!`git diff --stat``. Share a summary of what's changed 
 
 If any non-trivial problems were solved during this session, load the **ce-compound** skill and run it in headless mode (`/ce-compound mode:headless`) to document the solutions to `docs/solutions/`. If the session was purely exploratory or no concrete problems were solved, skip this step.
 
-## Step 4: Check for Running Dev Servers
+## Step 4: Check for Running Dev Servers (if applicable)
 
-Check for any lingering dev servers or node processes started during this session. Run `!`Get-Process -Name "node","vite","next","webpack","tsc" -ErrorAction SilentlyContinue | Select-Object Id, ProcessName, StartTime``. If any are found, list them and suggest stopping them with `Stop-Process -Id <id>` — do not kill them automatically.
+Only run this step if the project has dev server infrastructure (e.g., a `package.json` with dev scripts, `Cargo.toml` with a watch command, `Gemfile` with a Rails server, or config files for Vite/Next/Webpack). As a rule of thumb: if the project doesn't have a manifest file that declares a dev server, skip this step.
+
+If applicable, check for any lingering dev servers or node processes started during this session. Run `!`Get-Process -Name "node","vite","next","webpack","tsc" -ErrorAction SilentlyContinue | Select-Object Id, ProcessName, StartTime``. If any are found, list them and suggest stopping them with `Stop-Process -Id <id>` — do not kill them automatically.
 
 ## Step 5: Report
 
