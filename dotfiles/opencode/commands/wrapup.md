@@ -1,6 +1,5 @@
 ---
 description: End-of-session wrap-up — digest learnings, check git, capture next steps, compound solutions, stop dev servers
-agent: opencode
 ---
 
 # End-of-Session Wrap-Up
@@ -9,7 +8,7 @@ Run these steps in order. Before starting, check the current working directory a
 
 ## Step 1: Session Digest
 
-Load the **session-digest** skill and follow it to produce a structured markdown digest of this entire conversation. Extract key decisions, insights, artifacts, patterns, open questions, and next steps. Save the digest to `docs/session-digests/`.
+Load the **session-digest** skill and follow it to produce a structured markdown digest of this entire conversation. Extract key decisions, insights, artifacts, patterns, open questions, and next steps. See if a directory for session digests already exists otherwise save the digest to `docs/session-digests/`.
 
 ## Step 2: Check Git Status
 
