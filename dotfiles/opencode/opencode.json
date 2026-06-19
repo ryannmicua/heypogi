@@ -8,6 +8,10 @@
       "path": "../../external/opencode",
       "description": "OpenCode source code, docs source, and implementation details"
     },
+    "ce-source": {
+      "path": "../../external/compound-engineering",
+      "description": "Compound Engineering plugin by Every — source code, agents, skills, and docs"
+    },
     "heypogi-src-agents": {
       "path": "../../src/agents",
       "description": "Custom agent definitions for heypogi"
