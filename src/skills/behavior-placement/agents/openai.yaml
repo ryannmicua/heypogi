@@ -1,0 +1,7 @@
+interface:
+  display_name: "Behavior Placement"
+  short_description: "Place behavior in agents, skills, or both."
+  default_prompt: "Use $behavior-placement to classify these agent instructions into agent definition text, skill text, or both."
+
+policy:
+  allow_implicit_invocation: true
