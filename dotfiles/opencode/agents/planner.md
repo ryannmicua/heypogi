@@ -5,7 +5,6 @@ model: opencode-go/deepseek-v4-pro
 permission:
   edit: allow
   write: allow
-  bash: allow
   read: allow
   glob: allow
   grep: allow

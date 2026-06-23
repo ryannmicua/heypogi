@@ -13,7 +13,6 @@ description: >-
 mode: all
 permission:
   edit: deny
-  bash: ask
   read: allow
   glob: allow
   grep: allow

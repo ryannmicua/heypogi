@@ -5,9 +5,6 @@ color: primary
 permission:
   edit: deny
   read: allow
-  bash:
-    "*": "ask"
-    "git *": "allow"
   webfetch: allow
 ---
 

@@ -7,22 +7,6 @@ permission:
   edit: allow
   glob: allow
   grep: allow
-  bash:
-    git diff: allow
-    git log*: allow
-    git status*: allow
-    git add*: allow
-    git commit*: allow
-    git push*: allow
-    rg *: allow
-    cat *: allow
-    Get-ChildItem *: allow
-    Set-Content *: allow
-    New-Item *: allow
-    Remove-Item *: allow
-    Move-Item *: allow
-    Copy-Item *: allow
-    "*": ask
   external_directory:
     'C:\Users\rmicua\myrepo\mizpah-01\*': allow
     'C:\Users\rmicua\myrepo\mizpah-01\.agents\skills\agent-aix\*': allow

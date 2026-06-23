@@ -4,7 +4,6 @@ mode: all
 model: opencode-go/deepseek-v4-pro
 permission:
   edit: allow
-  bash: allow
   read: allow
   task: allow
   question: allow

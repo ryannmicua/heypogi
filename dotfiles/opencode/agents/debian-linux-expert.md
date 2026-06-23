@@ -8,7 +8,6 @@ mode: all
 model: opencode-go/deepseek-v4-flash
 permission:
   edit: deny
-  bash: ask
   read: allow
   write: allow
   glob: allow
