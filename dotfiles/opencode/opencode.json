@@ -23,7 +23,26 @@
     "heypogi-src-tools": {
       "path": "../../src/tools",
       "description": "Custom tool definitions for heypogi"
+    },
+    "heypogi-agents": {
+      "path": "agents",
+      "description": "Custom OpenCode agent definitions (auto-discovered .md files)"
+    },
+    "heypogi-commands": {
+      "path": "commands",
+      "description": "Custom OpenCode slash command definitions (auto-discovered .md files)"
+    },
+    "heypogi-agents-data": {
+      "path": "agents_data",
+      "description": "Supporting data files for custom agents (references, scripts)"
+    },
+    "downloads": {
+      "path": "C:/Users/rmicua/Downloads",
+      "description": "System downloads directory"
     }
+  },
+  "skills": {
+    "paths": ["../../src/skills"]
   },
   "permission": {
     "external_directory": {
@@ -31,7 +50,8 @@
       "../../external/opencode/**": "allow",
       "../../external/compound-engineering/plugins/compound-engineering/**": "allow",
       "~/.agents/skills/**": "allow",
-      "~/.local/share/opencode/**": "allow"
+      "~/.local/share/opencode/**": "allow",
+      "C:/Users/rmicua/Downloads/**": "allow"
     }
   }
 }
