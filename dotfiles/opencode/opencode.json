@@ -46,7 +46,6 @@
   },
   "permission": {
     "bash": {
-      "*": "ask",
       "git *": "allow",
       "rg *": "allow",
       "cat *": "allow",
@@ -92,7 +91,6 @@
       "Join-Path *": "allow"
     },
     "external_directory": {
-      "*": "ask",
       "../../external/opencode/**": "allow",
       "../../external/compound-engineering/plugins/compound-engineering/**": "allow",
       "~/.agents/skills/**": "allow",
