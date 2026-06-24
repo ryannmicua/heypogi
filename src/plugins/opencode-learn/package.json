@@ -1,0 +1,13 @@
+{
+  "name": "opencode-learn",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "description": "Passive cross-session learning store for OpenCode",
+  "dependencies": {
+    "xdg-basedir": "^5.1.0"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": "workspace:*"
+  }
+}
