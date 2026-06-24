@@ -1,6 +1,6 @@
 # Install Compound Engineering Plugin Skills
 
-Install the Compound Engineering plugin skills by linking the repo's `external/compound-engineering/plugins/compound-engineering/skills` folder into `~/.agents/skills/compound-engineering`.
+Install the Compound Engineering plugin skills by linking the repo's `external/compound-engineering/skills` folder into `~/.agents/skills/compound-engineering`.
 
 ## Safety / Approval Gate
 
@@ -11,7 +11,7 @@ Explain why: Codex and OpenCode discover user skills from `~/.agents/skills`, so
 ## Install
 
 1. Compute paths:
-   - CE skills root: `<repo_root>/external/compound-engineering/plugins/compound-engineering/skills`
+   - CE skills root: `<repo_root>/external/compound-engineering/skills`
    - Destination folder: `~/.agents/skills`
    - Link path: `~/.agents/skills/compound-engineering`
 

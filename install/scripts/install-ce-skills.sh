@@ -25,7 +25,7 @@ done
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd "${script_dir}/../.." && pwd -P)"
-skills_root="$(cd "${repo_root}/external/compound-engineering/plugins/compound-engineering/skills" && pwd -P)"
+skills_root="$(cd "${repo_root}/external/compound-engineering/skills" && pwd -P)"
 dest_dir="${HOME}/.agents/skills"
 dest_path="${dest_dir}/compound-engineering"
 

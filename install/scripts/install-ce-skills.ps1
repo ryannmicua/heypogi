@@ -60,7 +60,7 @@ function Resolve-ItemTargetPath {
 }
 
 $repoRoot = Get-RepoRootFromScriptLocation -ScriptRoot $PSScriptRoot
-$skillsRoot = Resolve-Path (Join-Path $repoRoot "external\compound-engineering\plugins\compound-engineering\skills")
+$skillsRoot = Resolve-Path (Join-Path $repoRoot "external\compound-engineering\skills")
 $destDir = Join-Path $HOME ".agents\skills"
 $destPath = Join-Path $destDir "compound-engineering"
 
