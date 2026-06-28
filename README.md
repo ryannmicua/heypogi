@@ -8,6 +8,18 @@
 2. **[`install/clone-opencode-source.md`](install/clone-opencode-source.md)** — clones OpenCode source for the `@opencode` subagent
 3. **[`install/install-skills.md`](install/install-skills.md)** — installs local skills into your agent environment
 
+## Plugin setup
+
+### Compound Engineering
+
+1. **[`install/clone-ce-source.md`](install/clone-ce-source.md)** — clones Compound Engineering source for the skills installer
+2. **[`install/install-ce-skills.md`](install/install-ce-skills.md)** — installs Compound Engineering plugin skills into your agent environment
+
+### Compound Knowledge
+
+1. **[`install/clone-knowledge-source.md`](install/clone-knowledge-source.md)** — clones Compound Knowledge source for the skills installer
+2. **[`install/install-knowledge-skills.md`](install/install-knowledge-skills.md)** — installs Compound Knowledge plugin skills into your agent environment
+
 Restart your terminal after step 1 (or reload your profile with `. $PROFILE`).
 
 ## Repository structure
