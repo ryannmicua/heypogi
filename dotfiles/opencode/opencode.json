@@ -41,6 +41,11 @@
       "description": "System downloads directory"
     }
   },
+  "agent": {
+    "explore": {
+      "model": "opencode-go/deepseek-v4-flash"
+    }
+  },
   "skills": {
     "paths": ["../../src/skills"]
   },
