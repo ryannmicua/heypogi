@@ -24,51 +24,58 @@ Do NOT load this skill for:
 
 ## Prerequisites
 
-### WezTerm (Session Manager)
+### tmux / psmux (Session Manager)
 
-This skill uses **WezTerm** as the visible session manager. Delegate work runs in WezTerm panes side-by-side with your session — visible by design, no attachment step needed.
+This skill uses **tmux** (or **psmux** on Windows) as the visible session manager. Delegate work runs in tmux panes side-by-side with your session — visible by design, no attachment step needed.
 
 ```bash
-# Verify wezterm is on PATH
-wezterm --version
+# Verify tmux is on PATH
+tmux --version
 ```
 
-If WezTerm is not installed:
+If not installed:
 
-**Windows:**
+**Windows (psmux — native tmux alternative, no WSL):**
 ```powershell
-winget install wezterm.wezterm
+winget install psmux
 ```
-Or download from https://wezterm.org/install/windows.html
+The installer adds `tmux`, `pmux`, and `psmux` command aliases. Documentation: https://psmux.pages.dev/
 
 **macOS:**
 ```bash
-brew install --cask wezterm
+brew install tmux
 ```
 
 **Linux:**
 ```bash
-# Follow instructions at https://wezterm.org/install/linux.html
+# Debian/Ubuntu
+sudo apt install tmux
+
+# Fedora
+sudo dnf install tmux
+
+# Arch
+sudo pacman -S tmux
 ```
 
-### WezTerm Context Requirement
+### tmux Context Requirement
 
-The `wezterm cli` commands ONLY work when invoked from inside a running WezTerm terminal. If the current session is not running inside WezTerm (e.g., Windows Terminal, VS Code terminal, standalone OpenCode TUI), skip Path A and use Path B (launch a new WezTerm window) or Path C (OpenCode task tool).
+The `tmux` commands work both inside and outside a tmux session, but split operations (`split-window`, `new-window`) only apply when currently inside tmux. If the current session is not running inside tmux, skip Path A and use Path B (launch a new terminal with tmux) or Path C (OpenCode task tool).
 
 Detect the current terminal:
 
 ```bash
-# Check if $TERM_PROGRAM indicates wezterm
-if [ "$TERM_PROGRAM" = "WezTerm" ]; then
-  echo "Running inside WezTerm — cli commands available"
+# Check if $TMUX is set (set automatically inside any tmux session)
+if [ -n "$TMUX" ]; then
+  echo "Running inside tmux — split commands available"
 else
-  echo "Not inside WezTerm — use Path B or C"
+  echo "Not inside tmux — use Path B or C"
 fi
 ```
 
 On Windows (PowerShell):
 ```powershell
-if ($env:TERM_PROGRAM -eq "WezTerm") { "Inside WezTerm" } else { "Outside WezTerm" }
+if ($env:TMUX) { "Inside tmux" } else { "Outside tmux" }
 ```
 
 ### Agent CLI
@@ -83,9 +90,9 @@ The delegate session runs the same agent harness. `opencode run` is the non-inte
 
 ## Launch Procedure
 
-### Path A: WezTerm CLI (Inside WezTerm — Primary)
+### Path A: Inside tmux — Primary
 
-When the current session is inside WezTerm, splits are the most visible delegate mechanism. The delegate runs in a split pane directly next to your working session.
+When the current session is inside tmux, splits are the most visible delegate mechanism. The delegate runs in a split pane directly next to your working session.
 
 **Step 1 — Build the goal prompt**
 
@@ -102,27 +109,29 @@ $goalPath = ".opencode\tmp\goal-<lane-name>.md"
 
 ```bash
 # Split the current pane vertically (bottom) and run the delegate
-wezterm cli split-pane --bottom --cwd "$(pwd)" -- opencode run --dir "$(pwd)" -f ".opencode/tmp/goal-<lane-name>.md"
+tmux split-window -v -c "$(pwd)" "opencode run --dir '$(pwd)' -f '.opencode/tmp/goal-<lane-name>.md'"
 
 # Or horizontally (right) for wider output:
-wezterm cli split-pane --right --cwd "$(pwd)" -- opencode run --dir "$(pwd)" -f ".opencode/tmp/goal-<lane-name>.md"
+tmux split-window -h -c "$(pwd)" "opencode run --dir '$(pwd)' -f '.opencode/tmp/goal-<lane-name>.md'"
 ```
 
 On Windows (PowerShell):
 ```powershell
-wezterm cli split-pane --bottom --cwd "$pwd" -- opencode run --dir "$pwd" -f ".opencode/tmp/goal-<lane-name>.md"
+tmux split-window -v -c "$pwd" "opencode run --dir '$pwd' -f '.opencode/tmp/goal-<lane-name>.md'"
 ```
 
-To spawn in a new tab instead of a split:
+To spawn in a new window instead of a split:
 ```bash
-wezterm cli spawn --cwd "$(pwd)" -- opencode run --dir "$(pwd)" -f ".opencode/tmp/goal-<lane-name>.md"
+tmux new-window -n "<lane-name>" -c "$(pwd)" "opencode run --dir '$(pwd)' -f '.opencode/tmp/goal-<lane-name>.md'"
 ```
 
-**Step 3 — Set the tab/pane title for identification**
+**Step 3 — Rename the window for identification**
 
 ```bash
-wezterm cli set-tab-title "<lane-name>"
+tmux rename-window -t "{current-session}:{current-window}.{pane-id}" "<lane-name>"
 ```
+
+Or simply rename the new window if created with `new-window` — it's already named.
 
 **Step 4 — Tell the user what happened**
 
@@ -130,29 +139,45 @@ After launching, the delegate is already visible — no attach step needed:
 
 ```
 Delegate started: <lane-name>
-Location: Split pane below / new tab "<lane-name>" in this WezTerm window
+Location: Split pane below / window "<lane-name>" in this tmux session
 To interrupt:  Ctrl+C in the delegate pane (or focus it and press Ctrl+C)
-To kill:       wezterm cli kill-pane --pane-id <pane-id>
+To kill:       tmux kill-pane -t <pane-target>
 ```
 
-### Path B: Launch a New WezTerm Window (Outside WezTerm)
+### Path B: New Terminal with tmux (Outside tmux)
 
-When the current session is NOT inside WezTerm, launch a dedicated WezTerm window for the delegate:
+When the current session is NOT inside tmux, launch a new terminal window running tmux with the delegate:
+
+**Windows (Windows Terminal):**
+```powershell
+# Launch a new Windows Terminal tab running a tmux session
+$lane = "<lane-name>"
+wt -w 0 nt --title "delegate-$lane" powershell -NoExit "tmux new-session -A -s $lane -c '$pwd'"
+Start-Sleep -Seconds 1
+# Send the delegate command to the tmux session
+tmux send-keys -t $lane "opencode run --dir '$pwd' -f '.opencode/tmp/goal-$lane.md'" Enter
+Write-Host "Delegate started in new terminal tab (delegate-$lane)"
+Write-Host "Attach via: tmux attach -t $lane"
+```
+
+**macOS/Linux (Terminal):**
+```bash
+# Open a new terminal window running tmux (macOS)
+osascript -e 'tell app "Terminal" to do script "tmux new-session -A -s <lane-name> -c \"$(pwd)\""'
+sleep 1
+tmux send-keys -t <lane-name> "opencode run --dir '$(pwd)' -f '.opencode/tmp/goal-<lane-name>.md'" Enter
+```
 
 ```bash
-wezterm start --class delegate --cwd /path/to/repo -- opencode run --dir /path/to/repo -f ".opencode/tmp/goal-<lane-name>.md"
+# Linux (x-terminal-emulator)
+x-terminal-emulator -e "tmux new-session -A -s <lane-name> -c '$(pwd)'" &
+sleep 1
+tmux send-keys -t <lane-name> "opencode run --dir '$(pwd)' -f '.opencode/tmp/goal-<lane-name>.md'" Enter
 ```
-
-On Windows:
-```powershell
-wezterm start --class delegate --cwd "C:\Users\rmicua\myrepo\heypogi" -- opencode run --dir "C:\Users\rmicua\myrepo\heypogi" -f ".opencode/tmp/goal-<lane-name>.md"
-```
-
-The `--class delegate` groups all delegate windows under one class, making them easy to find in the taskbar.
 
 ### Path C: OpenCode Built-in Task Tool (In-Harness)
 
-When neither WezTerm CLI is available (not inside WezTerm, `wezterm` not installed), fall back to OpenCode's native `task` tool. Less visible but preserves the supervision protocols below.
+When neither tmux CLI is available (not inside tmux, `tmux` not installed), fall back to OpenCode's native `task` tool. Less visible but preserves the supervision protocols below.
 
 ### Lane Naming Convention
 
@@ -178,28 +203,28 @@ If a lane name is taken, append `-2`, `-3`, etc.
 
 ### Observing Delegate Output
 
-**Inside WezTerm (Path A):** The delegate pane is visible — just look at it. No command needed.
+**Inside tmux (Path A):** The delegate pane is visible — just look at it. No command needed.
 
 **To programmatically capture output** from a specific pane:
 
 ```bash
-# List panes to find the delegate's pane ID
-wezterm cli list --format json
+# List panes/sessions to find the delegate's session name
+tmux list-sessions
 
-# Capture the text content of a pane
-wezterm cli get-text --pane-id <pane-id>
+# Capture the text content of a pane (last 100 lines)
+tmux capture-pane -t <lane-name> -p -S -100
 ```
 
-**Outside WezTerm (Path B):** The delegate runs in its own window — the user watches it directly.
+**Outside tmux (Path B):** The delegate runs in its own terminal window — the user watches it directly.
 
 ### Intervention Triggers
 
 | Signal | Detection | Action |
 |--------|-----------|--------|
-| **Stuck loop** | Same action repeated 3+ times in visible output | Focus delegate pane, Ctrl+C, redirect via `send-text` |
-| **Scope drift** | Agent modifies files outside `May modify` list, or works on unrelated features | Send a reminder of boundaries via `wezterm cli send-text --pane-id <id> "reminder message"`; if continuing, kill the pane |
-| **Destructive commands** | `rm -rf`, `git push --force`, `DROP TABLE`, `format` / `clean` on entire disks, secrets in output | Interrupt **immediately** — `wezterm cli send-text --pane-id <id> $'\x03'` (sends Ctrl+C) |
-| **Silent > 2x check interval** | No new output since last check | Check `wezterm cli get-text --pane-id <id>` for the last lines; if hung, send a wake prompt |
+| **Stuck loop** | Same action repeated 3+ times in visible output | Focus delegate pane, Ctrl+C, redirect via `send-keys` |
+| **Scope drift** | Agent modifies files outside `May modify` list, or works on unrelated features | Send a reminder of boundaries via `tmux send-keys -t <lane-name> "reminder message" Enter`; if continuing, kill the pane |
+| **Destructive commands** | `rm -rf`, `git push --force`, `DROP TABLE`, `format` / `clean` on entire disks, secrets in output | Interrupt **immediately** — `tmux send-keys -t <lane-name> C-c` |
+| **Silent > 2x check interval** | No new output since last check | Check `tmux capture-pane -t <lane-name> -p -S -100` for the last lines; if hung, send a wake prompt |
 | **Test failure loop** | Agent repeatedly runs same failing test without changing approach | Interrupt, suggest a different diagnosis strategy, or escalate to user |
 | **Permission denial** | Agent retries a command that the system rejects | Intervene — the agent may not know it lacks rights |
 | **Token/context exhaustion** | Output shows truncation or context overflow warnings | Kill pane, chunk the goal prompt into smaller pieces, re-launch |
@@ -207,10 +232,10 @@ wezterm cli get-text --pane-id <pane-id>
 To send keystrokes to a delegate pane:
 ```bash
 # Send Ctrl+C (interrupt)
-wezterm cli send-text --pane-id <id> $'\x03'
+tmux send-keys -t <lane-name> C-c
 
 # Send a text message (redirecting the agent)
-wezterm cli send-text --pane-id <id> "Stop what you're doing. Check scope: you modified a file outside the approved list."
+tmux send-keys -t <lane-name> "Stop what you're doing. Check scope: you modified a file outside the approved list." Enter
 ```
 
 ### Patience Thresholds
@@ -277,45 +302,53 @@ Only report "task complete" to the user when:
 Every delegate pane must be explicitly closed. Never leave abandoned panes running.
 
 ```bash
-# Kill a delegate pane by ID
-wezterm cli kill-pane --pane-id <pane-id>
+# Kill a delegate pane by target (session name)
+tmux kill-pane -t <lane-name>
 
-# List remaining panes to verify cleanup
-wezterm cli list
+# List remaining sessions to verify cleanup
+tmux list-sessions
 ```
 
-**Path B (separate window):** Close the window — the user can close it directly since it's visible.
+**Path B (separate terminal):** Close the terminal window — the user can close it directly since it's visible. Also kill the tmux session:
+```bash
+tmux kill-session -t <lane-name>
+```
 
-### WezTerm CLI Reference
+### tmux CLI Reference
 
 | CLI Command | Purpose |
 |-------------|---------|
-| `wezterm cli split-pane --bottom -- <cmd>` | Create a vertical split running a command |
-| `wezterm cli split-pane --right -- <cmd>` | Create a horizontal split |
-| `wezterm cli spawn -- <cmd>` | Open a new tab running a command |
-| `wezterm cli send-text --pane-id <id> <text>` | Send input to a pane |
-| `wezterm cli get-text --pane-id <id>` | Read pane text content |
-| `wezterm cli list --format json` | List all windows, tabs, panes as JSON |
-| `wezterm cli kill-pane --pane-id <id>` | Close a pane |
-| `wezterm cli set-tab-title <title>` | Set the current tab title |
-| `wezterm cli activate-pane --pane-id <id>` | Focus a specific pane |
-| `wezterm start -- <cmd>` | Launch a new WezTerm window |
+| `tmux split-window -v -c <cwd> <cmd>` | Create a vertical split (bottom) running a command |
+| `tmux split-window -h -c <cwd> <cmd>` | Create a horizontal split (right) |
+| `tmux new-window -n <name> -c <cwd> <cmd>` | Open a new window running a command |
+| `tmux send-keys -t <target> <text> Enter` | Send input to a pane (omit `Enter` for control chars) |
+| `tmux send-keys -t <target> C-c` | Send Ctrl+C to interrupt |
+| `tmux capture-pane -t <target> -p -S -100` | Read pane text content (last 100 lines) |
+| `tmux list-sessions` | List all active tmux sessions |
+| `tmux list-panes -a` | List all panes across all sessions |
+| `tmux kill-pane -t <target>` | Close a pane |
+| `tmux kill-session -t <target>` | Kill an entire session |
+| `tmux rename-window -t <target> <title>` | Rename the current window |
+| `tmux select-pane -t <target>` | Focus a specific pane |
+| `tmux new-session -d -s <name> -c <cwd> <cmd>` | Create a detached session |
+
+**Target syntax:** tmux targets follow the pattern `session:window.pane` — e.g., `fix-auth-bug:0.1`. When using `-t <lane-name>`, tmux resolves to the session with that name.
 
 Cleanup checklist before reporting completion:
-- [ ] Delegate pane killed (`wezterm cli kill-pane` or window closed)
-- [ ] No orphaned panes (verify via `wezterm cli list`)
+- [ ] Delegate pane killed (`tmux kill-pane` or `tmux kill-session` or window closed)
+- [ ] No orphaned sessions (verify via `tmux list-sessions`)
 - [ ] Temp goal prompt file removed (`.opencode/tmp/goal-<lane-name>.md`)
 - [ ] If the delegate used a git worktree, it has been removed
 - [ ] Any delegate-created temp files under system temp directories have been cleaned
 
-If a delegate pane is abandoned (e.g., the wezterm mux persisted it), locate and kill it on next invocation:
+If a delegate session is abandoned, locate and kill it on next invocation:
 
 ```bash
-# List all panes across all windows and tabs
-wezterm cli list --format json | python -m json.tool
+# List all sessions
+tmux list-sessions
 
-# Identify orphaned panes by their title/content and kill them
-wezterm cli kill-pane --pane-id <orphaned-pane-id>
+# Identify orphaned sessions by name and kill them
+tmux kill-session -t <orphaned-session-name>
 ```
 
 ## Integration with Other Skills
@@ -326,7 +359,7 @@ Compose with `goal-prompt-generator` to produce structured delegation prompts. T
 
 ### dispatching-parallel-agents
 
-When the `dispatching-parallel-agents` superpower identifies mutually independent tasks, launch one visible delegate pane per task. All panes share the same WezTerm window — the user sees every one.
+When the `dispatching-parallel-agents` superpower identifies mutually independent tasks, launch one visible delegate pane per task. All panes share the same tmux session — the user sees every one.
 
 ### session-operating-map
 
@@ -336,9 +369,9 @@ If a `session-operating-map` exists for the repo, record each delegate session i
 
 Test the full delegation loop:
 
-1. Verify wezterm is on PATH: `wezterm --version`
+1. Verify tmux is on PATH: `tmux --version`
 2. Build a goal prompt for a small, self-contained task (e.g., "add a comment to function X in file Y")
-3. Launch a delegate — split pane (Path A) or new window (Path B)
+3. Launch a delegate — split pane (Path A) or new terminal (Path B)
 4. Watch the delegate work in the visible pane/window
 5. After the delegate claims completion, run the verification gates
 6. Report results to the user
