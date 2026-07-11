@@ -58,6 +58,45 @@ Behavior:
 - Give enough context for a decision.
 - Leave the decision point with the leader.
 
+### Formal applications and self-advocacy
+
+Use when writing cover letters, capability statements, formal proposals, or any document where you are presenting your qualifications to a decision-maker you don't know personally.
+
+Structural arc (follow this order):
+1. Identity and referral/context — who you are and how you came to write
+2. Application or purpose statement — what you want, stated directly
+3. Background — where you came from, stated plainly
+4. Expertise — listed concretely, with domain anchors
+5. Value connection — how your experience translates to value for the reader
+6. Principles and approach — what you believe about the work
+7. Soft skills and closing request — who you are as a worker, what you're asking for
+8. Logistics and attachments — availability, location, where to find more
+
+Preferred patterns:
+- `I am [Name] and I was referred by [person] to [opportunity/context].`
+- `please accept this [document/letter] as my [application/submission] for [position/opportunity].`
+- `My working background has been in [field] since [starting point].`
+- `My expertise includes: [concrete list with domain anchors].`
+- `Working as a [role] with [audience/clients] has helped me hone [skills], find out what [audience] really want, and bring the planned vision to life.`
+- `Adhering to [principles/standards] are things I always keep in mind while [doing the work].`
+- `I also enjoy contributing and giving back to the [community] by [action].`
+- `Other strong points include [soft skills listed plainly].`
+- `Therefore in view of all of the above I would be [gratified/appreciative] if you consider me for [position/opportunity].`
+- `I am available for [interview/meeting/discussion] at [time/method]. I currently reside in [location] but would appreciate the opportunity to [meet/connect].`
+- `Please refer to the attached [document] for more details about my background and work experience.`
+
+Transition phrases:
+- `That said,` — pivot from context to request
+- `Therefore in view of all of the above` — summarize before closing ask
+- `Other strong points include` — introduce soft skills after technical ones
+
+Behavior:
+- State capabilities plainly, without arrogance. Let the concrete details do the convincing.
+- Connect every skill to a reader benefit: not "I know X" but "I know X, which means Y for you."
+- Name the community and the contribution. Be specific about what was built or given.
+- Close with a clear request and a redirect to supporting material.
+- Sign off simply: `Sincerely,` (formal) or `Best,` (less formal).
+
 ### Staff and direct reports
 
 Use a practical coaching voice. Be specific. Give the correction and, when useful, provide replacement wording.
@@ -122,7 +161,7 @@ Here are the details:
 - [detail]
 ```
 
-### Operational issue reports
+### Operational issue reports (brief, to vendors)
 
 Use:
 ```text
@@ -130,6 +169,38 @@ I'd like to report [issue]. Please [action].
 
 [Identifier or affected service]: [value]
 ```
+
+### Incident investigation reports (formal, internal)
+
+Use when documenting security incidents, system outages, or operational investigations. The report is factual, chronological, and carries enough detail for an uninvolved reader to understand what happened, what was done, and what the outcome was.
+
+```text
+Report Date: [YYYY-MM-DD]
+Written By: [Name]
+Role: [Role]
+Date of incident: [YYYY-MM-DD, or range]
+Incident Type: [short label]
+Location: [physical site or system]
+[Relevant identifiers]: [PRI numbers, IP addresses, hostnames, software versions]
+
+Description:
+On [date], [who] received [notification type] from [person/role] about [issue] due to [cause].
+
+[Who] investigated the incident and immediately [actions taken in chronological order].
+
+A review of [records/logs] show [findings] through the dates of [range] with no further abnormalities since [mitigations were implemented].
+
+Note that [relevant contextual detail that affected the incident or response].
+```
+
+Behavior:
+- Open with a metadata block so the reader can immediately see scope, severity, and ownership.
+- Write the narrative chronologically: trigger → investigation → actions → findings.
+- Name roles, not just people. Use full titles on first reference.
+- Include precise identifiers: phone numbers, IPs, software names, versions, date ranges.
+- Separate important context (office closed, system under maintenance, third-party involved) into a "Note that" line at the end so it doesn't interrupt the timeline.
+- Use active voice for investigator actions ("investigated," "changed," "blocked"). Passive voice is acceptable for system states ("were implemented," "was observed").
+- Stop once the facts, findings, and context are recorded. No recommendations, no opinions, no root-cause analysis unless explicitly requested.
 
 ### Approval or renewal notes
 
@@ -162,6 +233,38 @@ For completeness, please add the following:
 Here's a simple [table/text] you can use:
 
 [replacement content]
+```
+
+### Self-advocacy (cover letters, capability statements, proposals)
+
+Use:
+```text
+I am [Name] and I was referred by [person/source] to [opportunity].
+
+That said, please accept this [letter/document] and the attached [supporting material] as my [application/submission] for [position/opportunity].
+
+My working background has been in [field] since [starting point].
+
+My expertise includes:
+- [capability 1, with domain or tool anchor]
+- [capability 2, with domain or tool anchor]
+- [capability 3, with domain or tool anchor]
+
+Working as a [role] with [audience] has helped me hone [skill area], find out what [audience] really want, and bring the planned vision to life.
+
+Adhering to [principles/standards] are things I always keep in mind while [doing the work], helping me to [concrete outcome].
+
+I also enjoy contributing and giving back to the [community] by [specific action]. You can see some of my work at [link].
+
+Other strong points include [soft skills listed plainly].
+
+Therefore in view of all of the above, I would be [gratified/appreciative] if you consider me for [position/opportunity].
+
+I am available for [interview/discussion] at [time/method]. I currently reside in [location] but would appreciate the opportunity to [meet/connect].
+
+Please refer to the attached [document] for more details about my background and work experience.
+
+Sincerely,
 ```
 
 ### Status or project hold
@@ -200,6 +303,13 @@ Prefer:
 - `The organization can upgrade later if...`
 - `Let me know if...`
 - `Just let us know when...`
+- `That said,` — pivot from context to action
+- `Therefore in view of all of the above` — formal summary before closing ask
+- `Other strong points include` — introduce supplementary qualities
+- `On [date], [who] received [notification] from [person/role] about [issue] due to [cause].` — incident trigger
+- `investigated the incident and immediately [actions].` — response sequence
+- `A review of [records] show [findings] through the dates of [range] with no further abnormalities since [date].` — evidence-based finding
+- `Note that [contextual detail].` — important context separated from narrative
 
 Avoid unless the user asks for a warmer/formal style:
 - `I hope this email finds you well.`
