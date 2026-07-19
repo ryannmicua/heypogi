@@ -1,0 +1,4 @@
+interface:
+  display_name: "HTML Artifacts"
+  short_description: "Render polished offline HTML artifacts"
+  default_prompt: "Use $html-artifacts to turn this dense output into a polished, self-contained HTML artifact."
