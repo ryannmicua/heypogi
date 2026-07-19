@@ -29,6 +29,7 @@ venv/
 
 # Agent runtimes
 .context7/
+output-html/
 
 # External
 external/opencode/
