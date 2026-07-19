@@ -34,3 +34,4 @@ output-html/
 # External
 external/opencode/
 external/compound-engineering/
+external/.repo-update-status.json

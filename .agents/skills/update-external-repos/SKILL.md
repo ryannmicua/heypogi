@@ -7,7 +7,7 @@ description: Use when the user asks to update, refresh, pull, sync, or get the l
 
 ## Overview
 
-This project vendors three external repos under `external/` via standalone clones (not submodules). This skill pulls the latest from all three.
+This project vendors three external repos under `external/` via standalone clones (not submodules). This skill pulls the latest from all three and keeps the local freshness tracker current.
 
 ## External Repositories
 
@@ -27,18 +27,26 @@ Run the clone scripts for each external repo. Each script clones if missing, or 
 & ".\install\scripts\clone-opencode-source.ps1" -Quiet
 ```
 
-The `-Quiet` flag skips the interactive Y/N prompt and pulls automatically.
+The `-Quiet` flag skips the interactive Y/N prompt and pulls automatically. Each
+successful clone or pull records its UTC timestamp, branch, commit, and remote in
+the ignored local ledger at `external/.repo-update-status.json`.
 
 ## Verify the Update
 
-After pulling, check the latest commits:
+After pulling, check the latest commits and confirm the freshness tracker:
 
 ```powershell
 foreach ($dir in @("compound-engineering", "compound-knowledge", "opencode")) {
   $path = ".\external\$dir"
   Write-Host "$dir : $(git -C $path log --oneline -1)"
 }
+
+& ".\install\scripts\get-external-repo-status.ps1"
 ```
+
+The status command reports `CURRENT` for each successfully refreshed repository.
+It exits with code `1` when an update record is missing or older than the configured
+freshness window (seven days by default).
 
 ## When Not to Use
 

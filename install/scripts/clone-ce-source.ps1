@@ -26,6 +26,8 @@ $repoRoot = Get-RepoRootFromScriptLocation -ScriptRoot $PSScriptRoot
 $externalDir = Join-Path $repoRoot "external"
 $targetDir = Join-Path $externalDir "compound-engineering"
 $cloneUrl = "https://github.com/EveryInc/compound-engineering-plugin.git"
+$statusRecorder = Join-Path $PSScriptRoot "record-external-repo-update.ps1"
+$didUpdate = $false
 
 if (-not (Test-Path -LiteralPath $externalDir -PathType Container)) {
   New-Item -ItemType Directory -Path $externalDir | Out-Null
@@ -36,12 +38,18 @@ if (Test-Path -LiteralPath $targetDir -PathType Container) {
   if (-not $existing) {
     throw "$targetDir exists but is not a git repository. Remove it manually and re-run."
   }
-  if (-not $Quiet) {
+  if ($Quiet) {
+    & "git" "-C" $targetDir "pull"
+    if ($LASTEXITCODE -ne 0) { throw "Pull failed. Check network access to $cloneUrl" }
+    $didUpdate = $true
+  } else {
     Write-Host "Compound Engineering source already cloned at: $targetDir" -ForegroundColor Green
     $choice = Read-Choice -Prompt "Pull latest? [Y]es, [N]o?" -ValidChoices @("Y", "N")
     if ($choice -eq "Y") {
       Write-Host "Pulling latest..." -ForegroundColor Cyan
       & "git" "-C" $targetDir "pull"
+      if ($LASTEXITCODE -ne 0) { throw "Pull failed. Check network access to $cloneUrl" }
+      $didUpdate = $true
     }
   }
 } else {
@@ -50,6 +58,11 @@ if (Test-Path -LiteralPath $targetDir -PathType Container) {
   if ($LASTEXITCODE -ne 0) {
     throw "Clone failed. Check network access to $cloneUrl"
   }
+  $didUpdate = $true
+}
+
+if ($didUpdate) {
+  & $statusRecorder -Name "compound-engineering" -RepositoryPath $targetDir
 }
 
 if (-not $Quiet) {

@@ -61,3 +61,16 @@ Put change-control / project tracking in `docs/`:
 1. Add (or refine) a reusable asset under `src/`.
 2. If it changes how you work, capture the rationale in `docs/` (spec/plan/decision as appropriate).
 3. Keep iterating: prune duplicates, promote repeated patterns into templates/skills.
+
+## External repo freshness
+
+The external source clones record their most recent successful clone or pull in an
+ignored local ledger. Check whether an update is due without contacting remotes:
+
+```powershell
+& ".\install\scripts\get-external-repo-status.ps1"
+```
+
+The default freshness window is seven days. Override it when needed with
+`-MaxAgeDays`, for example `-MaxAgeDays 14`. The command exits with code `1` when
+one or more repositories are due for a check, so it can also be used in automation.
