@@ -17,18 +17,21 @@ Set OpenChamber to start automatically on Windows login, bound to `0.0.0.0:7777`
    [Environment]::SetEnvironmentVariable("OPENCHAMBER_UI_PASSWORD", "yourpassword", "User")
    ```
 
-3. **Create the startup wrapper script**
+3. **Create the startup wrapper script and VBS launcher**
    ```powershell
    $dir = "$env:USERPROFILE\.config\openchamber"
    New-Item -ItemType Directory -Path $dir -Force
    @"
    & 'C:\Program Files\nodejs\node.exe' "$env:APPDATA\npm\node_modules\@openchamber\web\bin\cli.js" serve --foreground --port 7777 --host 0.0.0.0
    "@ | Set-Content "$dir\startup.ps1"
+   @"
+   CreateObject("Wscript.Shell").Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -File " & CreateObject("Scripting.FileSystemObject").GetParentFolderName(WScript.ScriptFullName) & "\startup.ps1", 0, False
+   "@ | Set-Content "$dir\launch.vbs"
    ```
 
 4. **Register via HKCU Run key** (no admin required)
    ```powershell
-   New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "OpenChamber" -Value "powershell.exe -NoProfile -ExecutionPolicy Bypass -File $env:USERPROFILE\.config\openchamber\startup.ps1" -PropertyType String -Force
+   New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "OpenChamber" -Value "wscript.exe //NoLogo $env:USERPROFILE\.config\openchamber\launch.vbs" -PropertyType String -Force
    ```
 
 5. **Verify the registration**
