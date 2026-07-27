@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "daemon": {
+    "listen": "0.0.0.0:6767",
+    "hostnames": [],
+    "mcp": {
+      "injectIntoAgents": true
+    },
+    "browserTools": {
+      "enabled": true
+    },
+    "autoArchiveAfterMerge": false,
+    "enableTerminalAgentHooks": false,
+    "appendSystemPrompt": "",
+    "terminalProfiles": [
+      {
+        "id": "codex",
+        "name": "Codex",
+        "command": "codex",
+        "icon": "codex"
+      },
+      {
+        "id": "opencode",
+        "name": "OpenCode",
+        "command": "opencode",
+        "icon": "opencode"
+      }
+    ],
+    "cors": {
+      "allowedOrigins": [
+        "https://app.paseo.sh"
+      ]
+    },
+    "relay": {
+      "enabled": true
+    }
+  },
+  "app": {
+    "baseUrl": "https://app.paseo.sh"
+  },
+  "providers": {
+    "openai": {
+      "apiKey": "set-your-openrouter-api-key-here",
+      "baseUrl": "https://openrouter.ai/api/v1"
+    }
+  },
+  "agents": {
+    "providers": {
+      "claude": {
+        "enabled": false
+      },
+      "copilot": {
+        "enabled": false
+      },
+      "pi": {
+        "enabled": false
+      },
+      "codex": {
+        "enabled": true
+      },
+      "opencode": {
+        "enabled": true
+      }
+    }
+  },
+  "features": {
+    "dictation": {
+      "enabled": false,
+      "stt": {
+        "provider": "openai",
+        "model": "nvidia/parakeet-tdt-0.6b-v3"
+      }
+    },
+    "voiceMode": {
+      "enabled": false,
+      "stt": {
+        "provider": "openai",
+        "model": "nvidia/parakeet-tdt-0.6b-v3"
+      },
+      "tts": {
+        "provider": "local"
+      }
+    },
+    "webUi": {
+      "enabled": true
+    }
+  }
+}

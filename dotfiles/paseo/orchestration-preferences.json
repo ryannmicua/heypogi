@@ -1,0 +1,21 @@
+{
+  "providers": {
+    "impl": "opencode",
+    "ui": "opencode",
+    "research": "opencode",
+    "planning": "codex",
+    "audit": "opencode"
+  },
+  "preferences": [
+    "impl: model=opencode-go/deepseek-v4-flash, features.auto_accept=true, features.fast_mode=true, modeId=build",
+    "ui: model=opencode-go/kimi-k3, thinkingOptionId=auto",
+    "research: model=opencode-go/deepseek-v4-pro, thinkingOptionId=max",
+    "planning: provider=codex, model=gpt-5.6-sol",
+    "audit: model=opencode-go/glm-5.2, thinkingOptionId=auto (cross-family contrast from impl — always a different model family than the primary agent)",
+    "default: model=opencode-go/deepseek-v4-flash, thinkingOptionId=auto, modeId=default",
+    "For committees and second opinions, deliberately use a different model family than the primary agent to get genuine cross-model contrast.",
+    "Scheduled/recurring agents should use the impl provider and model unless the task specifically requires research or audit reasoning.",
+    "Prefer asynchronous workflows. Set notifyOnFinish=true for all agent-scoped creates. Do not poll for completion.",
+    "Use workspace isolation (worktree mode) when running multiple agents in parallel on the same repo to prevent filesystem conflicts."
+  ]
+}
