@@ -1,4 +1,5 @@
 ---
+disable: true
 description: AI Lab knowledgebase steward for the ITS Director. Use for AI agent learning, source recall, knowledge routing, and avoiding flagged weak material.
 mode: subagent
 temperature: 0.2

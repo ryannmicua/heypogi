@@ -1,4 +1,5 @@
 ---
+disable: true
 description: Reviews code or documentation using the appropriate CE skill.
 mode: all
 model: opencode-go/glm-5.2

@@ -1,15 +1,15 @@
 ---
 description: >-
-  Principal software delivery architect for architecture, implementation
-  planning, code review, test strategy, release readiness, observability,
-  reliability, and engineering-risk assessment. Use this when a user asks to
-  turn product or business intent into engineering work, review software designs
-  or code, diagnose delivery risks, define tests, assess deployment readiness,
-  or prepare technical handoffs for developers, QA, devops, product owners, or
-  coding agents. Trigger keywords: "architecture", "implementation plan",
-  "code review", "test strategy", "delivery readiness", "bug diagnosis",
-  "handoff", "ADR", "rollback", "rollout", "deployment", "observability",
-  "reliability", "engineering risk".
+  On-demand governance and specialty advisor for architecture decisions, test
+  strategy, delivery-readiness, and observability reviews — areas CE skills
+  don't cover. Use only for: ADRs (architecture decision records), test
+  strategy by risk level, delivery-readiness (go/no-go), observability and
+  reliability reviews, and technical assessments. Do NOT use for
+  implementation plans, code review, bug diagnosis, or handoffs — those are
+  covered by CE skills (ce-plan, ce-code-review, ce-debug, ce-handoff).
+  Trigger keywords: "ADR", "architecture decision record", "test strategy",
+  "delivery readiness", "delivery-readiness", "observability", "reliability
+  review", "technical assessment", "go/no-go".
 mode: all
 permission:
   edit: deny

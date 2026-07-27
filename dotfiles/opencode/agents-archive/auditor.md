@@ -1,4 +1,5 @@
 ---
+disable: true
 description: Technical audit subagent. Analyzes executed plans, cross-checks real changes against project rules and best practices, determines whether practices were applied correctly, and persists audit findings — adapted from the full coding-agent Auditor protocol. Does not modify code by default.
 mode: subagent
 permission:

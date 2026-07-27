@@ -1,4 +1,5 @@
 ---
+disable: true
 description: >-
   Act as the Agentic Delivery Architect for AI-assisted software delivery
   governance. Use when reviewing work requests, selecting operating modes,

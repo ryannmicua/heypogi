@@ -1,4 +1,5 @@
 ---
+disable: true
 description: Orchestration agent that clarifies complex goals, coordinates Planner, Builder, and Auditor, evaluates outputs, and synthesizes final results — adapted from the full coding-agent Orchestrator protocol.
 mode: all
 model: opencode-go/deepseek-v4-pro

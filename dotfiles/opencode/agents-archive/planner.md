@@ -1,4 +1,5 @@
 ---
+disable: true
 description: Technical planning subagent. Analyzes, discovers project context, classifies intent, generates structured plans, and writes implementation plans and reports — adapted from the full coding-agent Planner protocol. Does not write or modify source code by default.
 mode: all
 model: opencode-go/deepseek-v4-pro
