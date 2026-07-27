@@ -4,7 +4,7 @@ type: feat
 date: 2026-07-28
 topic: paseo-plan-execution-supervisor
 artifact_contract: ce-unified-plan/v1
-artifact_readiness: requirements-only
+artifact_readiness: implementation-ready
 product_contract_source: ce-brainstorm
 execution: code
 deepened: 2026-07-28
@@ -17,7 +17,8 @@ deepened: 2026-07-28
 - **Objective:** Provide a resumable OpenCode supervisor that executes an approved plan sequentially by delegating implementation and calibrated independent audit through the local Paseo daemon.
 - **Product authority:** This Product Contract governs v1 behavior. Each run is additionally bound to its immutable plan snapshot and declared limits.
 - **Execution profile:** Subscription-backed Codex and OpenCode Go roles use provider-enforced subscription limits plus bounded retries. Metered roles require enforceable run token and cost limits.
-- **Open blocker:** Select at least one worker-isolation profile and an operator-authorization trust anchor that current Paseo/provider execution can enforce; until then setup may support zero runnable profiles.
+- **Worker trust boundary (v1-resolved):** v1 ships a narrowed trust boundary — Paseo worktree isolation (`--isolation worktree`) plus an out-of-tree owner-only control store (outside the git common dir; KTD2) plus a worker environment scrubbed of supervisor/operator secrets and the operator-presence capability, plus hash-chain tamper evidence. v1 does NOT claim to survive a malicious same-OS-user delegated agent; a real OS/container sandbox (full KTD11) is a v2 hardening item (OIR-001).
+- **v1 execution profile:** Subscription-only — Codex and OpenCode Go roles use provider-enforced subscription limits plus bounded retries. Metered roles and the accounting gateway are deferred to v2 (OIR-002). Supported v1 profile: Windows host + local Paseo + OpenCode Go subscription impl + OpenCode Go subscription audit (cross-family contrast).
 - **Stop conditions:** Invalid plan authority, unavailable required accounting, uncertified audit, exhausted retries or budgets, unresolved permissions, and reconciliation conflicts stop dispatch.
 - **Tail ownership:** The supervisor owns final reconciliation and reporting; implementation and audit agents never authorize completion.
 
@@ -53,6 +54,8 @@ The product therefore needs a repo-owned execution authority that survives sessi
 - **Calibrate audit before it can authorize completion.** (session-settled: user-approved — chosen over treating cross-family model contrast as sufficient: judge miscalibration can produce false completion.) Governs R14-R15, R31-R33.
 - **Fail closed on uncertainty or resume conflict.** (session-settled: user-approved — chosen over best-effort continuation or automatic reconciliation: the supervisor must not guess when authority or budget is unclear.) Governs R7, R19-R20, R23-R26.
 - **Keep active observability attention-first.** (session-settled: user-approved — chosen over a live dashboard: routine detail belongs in the journal while OpenCode surfaces budgets and intervention needs.) Governs R27-R28.
+- **Narrow the v1 worker trust boundary.** (session-settled: user-approved — chosen over shipping a container/OS sandbox in v1: Paseo on Windows offers no real worker sandbox and git worktrees share the common dir, so the full KTD11 cannot be honestly satisfied without a real sandbox.) v1 isolates via worktree + out-of-tree owner-only control store + scrubbed worker env + hash-chain tamper evidence; it does not claim to survive a malicious same-OS-user delegated agent. Governs R5, R9-R11, R20-R21, R24 (partially); creates a v2 hardening item.
+- **Ship v1 subscription-only.** (session-settled: user-approved — chosen over including metered execution in v1: no metered provider is in active use and deferring the accounting gateway removes the highest-risk surface from v1.) Metered roles, the metering gateway (U4), and the metered legs of U2/U3/U6 are deferred to v2. Governs R3-R5, R16, R19-R21 (subscription legs only in v1).
 
 ### Actors
 
@@ -322,11 +325,11 @@ stateDiagram-v2
 
 ### Outstanding Questions
 
-**Resolve Before Planning**
+**Resolved Before Planning (2026-07-28)**
 
-- Choose the v1 worker trust boundary: require a proven container, OS sandbox, or provider sandbox that denies control-state and credential access, or explicitly narrow the threat model and revise KTD11's guarantees.
-- Choose the operator-presence trust anchor for conflict resolution and budget increases so the deterministic CLI can distinguish an operator from a delegated or unrelated local process.
-- Enumerate the exact initial host, Paseo version, implementation profile, audit profile, and metered adapter combinations that must pass U8; all other combinations remain unsupported.
+- Worker trust boundary: narrowed per user-approved session decision — v1 ships worktree isolation + out-of-tree owner-only control store (KTD2) + scrubbed worker env + hash-chain tamper evidence; does NOT claim to survive a malicious same-OS-user delegated agent. Full KTD11 sandbox deferred to v2 (OIR-001).
+- Operator-presence trust anchor: one-shot capability minted by the deterministic CLI and confirmed in the active OpenCode TUI; absent from worker env. Resists non-adversarial local calls under the narrowed v1 model (v2 for adversarial).
+- Supported v1 profile: Windows host + local Paseo + OpenCode Go subscription impl (opencode-go/deepseek-v4-flash|pro) + OpenCode Go subscription audit (opencode-go/glm-5.2, cross-family contrast). No metered adapter in v1. Setup pins the exact installed Paseo and provider CLI versions (deferred-to-implementation item below).
 
 **Deferred to Implementation**
 
@@ -348,22 +351,22 @@ stateDiagram-v2
 
 ## Planning Contract
 
-**Product Contract preservation:** changed R3-R5 and R19-R21 to implement the user-directed subscription-versus-metered accounting policy; strengthened R14 and added R31-R33 for the confirmed audit-calibration gate; added R34 to make A1's existing stop behavior explicit; all other Product Contract behavior and stable IDs are preserved.
+**Product Contract preservation:** changed R3-R5 and R19-R21 to implement the user-directed subscription-versus-metered accounting policy; strengthened R14 and added R31-R33 for the confirmed audit-calibration gate; added R34 to make A1's existing stop behavior explicit; all other Product Contract behavior and stable IDs are preserved. Subsequent scope decision (2026-07-28): v1 implements the subscription legs only — metered roles, the metered R19-R21 legs, U4, AE3, AE10, AE11, and the metered portions of U2/U3/U6 are deferred to v2 with stable IDs preserved; the v1 worker trust boundary is narrowed (revised KTD11) and does not claim to survive a malicious same-OS-user delegated agent. The full Product Contract remains the target for v2.
 
 ### Key Technical Decisions
 
 - KTD1. **Keep authoritative mechanics deterministic.** The OpenCode command and skill orchestrate intent, prompts, and operator interaction, while a Python standard-library CLI owns state transitions, hashing, locking, budget arithmetic, schema validation, and reconciliation. This prevents model judgment from becoming the state authority prohibited by R9-R11.
-- KTD2. **Store control state in the Git common directory.** Each repository stores supervisor state under its resolved Git common directory, shared by worktrees but outside delegated worktree content. A run contains an immutable manifest and plan snapshot, atomically published hash-chained event files, content-addressed evidence, and a disposable derived projection. This implements R6-R13 without requiring a database or allowing a mutable checkpoint to become authoritative.
+- KTD2. **Store control state out of the git common directory.** Each repository stores supervisor state under an owner-only out-of-tree directory keyed by repository identity, default `~/.paseo-supervisor/runs/<repo-id>/<run-id>/` — NOT under `<git-common-dir>`. Rationale: git worktrees share the common dir and a delegated worker runs as the same OS user, so any in-common-dir store is reachable by sibling worktrees and by the worker; out-of-tree placement keeps normal in-repo agent tooling and accidental traversal away from control state, and survives worktree deletion. Owner-only ACLs deny a different OS user. Under the narrowed v1 threat model, out-of-tree placement does NOT deny a malicious same-OS-user process (see revised KTD11/KTD12); hash chains + content-addressed evidence provide tamper EVIDENCE, not prevention. A run contains an immutable manifest and plan snapshot, atomically published hash-chained event files, content-addressed evidence, and a disposable derived projection. This implements R6-R13 without a database and without allowing a mutable checkpoint or a worktree-shared path to become authoritative.
 - KTD3. **Use explicit provider capability profiles.** (session-settled: user-directed — chosen over universal hard run budgets: subscription-backed Codex and OpenCode Go already have provider-enforced service limits, while usage-priced providers need run-level protection.) Profiles are explicit configuration, never inferred from model names. `subscription` profiles require retry limits and provider-exhaustion handling; `metered` profiles additionally require an enforcing adapter, immutable rate card, reservation limits, and durable usage settlement. Governs R3-R5 and R16-R21.
-- KTD4. **Proxy metered OpenCode traffic through a local accounting gateway.** OpenCode supports provider base-URL overrides, so OpenAI-compatible OpenRouter, OpenCode Zen, and direct DeepSeek API traffic can pass through a repository-independent local gateway that checks the active delegation reservation before forwarding, records provider usage, and refuses requests that cannot fit the remaining allowance. Non-compatible endpoints remain unsupported until an adapter proves equivalent controls. Governs R5 and R19-R21.
+- KTD4. **Proxy metered OpenCode traffic through a local accounting gateway.** (v2 — deferred: v1 is subscription-only.) OpenCode supports provider base-URL overrides, so OpenAI-compatible OpenRouter, OpenCode Zen, and direct DeepSeek API traffic would pass through a repository-independent local gateway that checks the active delegation reservation before forwarding, records provider usage, and refuses requests that cannot fit the remaining allowance. Non-compatible endpoints remain unsupported until an adapter proves equivalent controls. Governs R5 and R19-R21 (v2). The full design is retained here for the v2 plan; v1 does not implement U4 or the metered legs of U2/U3/U6.
 - KTD5. **Charge unresolved reservations conservatively.** A metered reservation is journaled before agent creation and remains fully consumed after cancellation, crash, daemon loss, or unverifiable telemetry. Only successful settlement against durable gateway records releases unused capacity. Governs R20-R21 and R23-R26.
 - KTD6. **Use a versioned evidence envelope.** Implementation and audit results bind the run, step, attempt, delegation, plan snapshot, workspace tree, changed files, verification commands, raw-output hashes, and criterion-level evidence. Missing or mismatched fields produce `NOT_VERIFIABLE`; Paseo idle state, worker prose, tests, or commits never substitute for this envelope. Governs R11 and R14-R15.
 - KTD7. **Certify immutable audit profiles.** (session-settled: user-approved — chosen over cross-family contrast alone: independent models can share the same blind spots.) An audit profile pins rubric, prompt, provider, model, settings, evidence schema, and a human-reviewed 15-case corpus. Certification requires zero false approvals on blocker cases, at least 14/15 overall agreement, zero approvals with invalid evidence, and no more than two false blocks. A confirmed false approval decertifies the profile immediately. Governs R14-R15 and R31-R33.
 - KTD8. **Reconcile observations without promoting them to authority.** Resume derives status from the event chain, then compares the plan hash, Git tree, Paseo labels and lifecycle, native persistence handles, permissions, evidence, and provider accounting. Any disagreement transitions to attention and requires an append-only operator resolution event. Governs R22-R26.
 - KTD9. **Use explicit run selection and a single writer.** Discovery lists unfinished runs for operator selection. An atomic lock grants one session transition authority; stale locks trigger reconciliation rather than automatic takeover. This prevents silent selection and concurrent resume races.
 - KTD10. **Treat the unified plan as the approved specification.** (session-settled: user-approved — chosen over migrating the plan into an absent legacy spec: the CE unified artifact already owns the Product Contract and implementation detail.) Update the repository document-control guidance so `requirements-only` is the specification stage and `implementation-ready` is the executable stage of one artifact.
-- KTD11. **Admit only isolated worker profiles.** R10-R11 cannot be enforced by worktree convention alone because delegated agents run as local processes. Setup must prove that the selected Paseo/provider sandbox denies workers access to the Git-common-dir control store, upstream credentials, gateway signing keys, operator authorization, and other run worktrees while permitting only the assigned worktree and result channel. Unsupported host/provider combinations fail setup rather than relying on prompt compliance.
-- KTD12. **Authenticate every privileged local action.** Loopback binding limits transport exposure but does not establish caller authority. Gateway requests use scoped, expiring, replay-resistant delegation capabilities; conflict resolution and budget increases require separate operator-presence authorization bound to the expected journal head.
+- KTD11. **Admit only isolated worker profiles.** (v1 scope narrowed — session-settled: user-approved.) Original intent: R10-R11 cannot be enforced by worktree convention alone because delegated agents run as local processes, and a real sandbox that denies the worker access to the Git-common-dir control store, upstream credentials, gateway signing keys, operator authorization, and other run worktrees is required. v1 reality: Paseo on Windows offers only `--isolation local|worktree` (no container/OS sandbox), and git worktrees share the common dir, so the full sandbox cannot be honestly provided in v1. v1 therefore narrows the guarantee to: worktree isolation from sibling runs, control state stored out of the git common dir (KTD2) so normal in-repo agent tooling cannot reach it, worker environment scrubbed of supervisor/operator secrets and the operator-presence capability, and hash-chain tamper EVIDENCE. v1 does NOT claim to deny a malicious same-OS-user delegated agent deliberate access to control state or credentials. Setup proves the v1 isolation level per supported profile; the real OS/container sandbox (full KTD11) is a v2 hardening item (OIR-001). Profiles claiming sandbox-level guarantees remain inadmissible in v1.
+- KTD12. **Authenticate every privileged local action.** Loopback binding limits transport exposure but does not establish caller authority. Gateway requests use scoped, expiring, replay-resistant delegation capabilities (v2 — no gateway in v1). For v1, privileged local actions (conflict resolution, operator stop, final closure, retry-limit changes) require operator-presence authorization: a one-shot capability minted by the deterministic CLI and confirmed by the human operator in the active OpenCode TUI session, bound to the run, operation, expected journal head, and nonce. The capability is absent from every worker delegation environment. Under the narrowed v1 threat model this resists honest confusion and non-adversarial local process calls; it does NOT claim to resist a malicious same-OS-user delegated agent (v2 — OIR-001).
 
 ### High-Level Technical Design
 
@@ -371,26 +374,26 @@ stateDiagram-v2
 flowchart TB
   Operator[Operator via OpenCode command] --> Skill[Supervisor skill]
   Skill --> CLI[Deterministic supervisor CLI]
-  CLI --> Store[Git-common-dir event store]
+  CLI --> Store[Out-of-tree owner-only event store]
   CLI --> Paseo[Paseo daemon]
   Paseo --> Impl[Implementation agent]
   Paseo --> Audit[Certified audit agent]
   Impl --> Worktree[Cumulative run worktree]
   Audit --> Worktree
-  CLI --> Gateway[Metered accounting gateway]
-  Gateway --> Metered[Metered model provider]
+  CLI -. v2 .-> Gateway[Metered accounting gateway]
+  Gateway -. v2 .-> Metered[Metered model provider]
   Paseo --> Subscription[Subscription provider]
   CLI --> Evidence[Content-addressed evidence]
   Store --> CLI
   Evidence --> CLI
 ```
 
-The CLI exposes setup, start, list, status, resume, stop, inspect, resolve, and change-budget operations. Every operation that mutates run control state validates the event chain, acquires the run lock, refreshes external observations, applies one legal transition, publishes one event atomically, and regenerates the disposable projection.
+The CLI exposes setup, start, list, status, resume, stop, inspect, resolve, and change-budget operations (change-budget is metered-only, deferred to v2). Every operation that mutates run control state validates the event chain, acquires the run lock, refreshes external observations, applies one legal transition, publishes one event atomically, and regenerates the disposable projection.
 
 ### State and Storage Contract
 
 - Repository configuration lives at `.paseo-supervisor/config.json`; explicit run overrides take precedence, then repository defaults. Setup may import role suggestions from `dotfiles/paseo/orchestration-preferences.json` in this repository, but the admitted run manifest is authoritative.
-- Run control state lives under `<git-common-dir>/paseo-supervisor/runs/<run-id>/`; implementation must resolve this path with Git rather than hard-code `.git` because worktrees use indirection files.
+- Run control state lives under an owner-only out-of-tree directory, default `~/.paseo-supervisor/runs/<repo-id>/<run-id>/`, keyed by repository identity — NOT under `<git-common-dir>`. Rationale: git worktrees share the common dir and a worker runs as the same OS user, so any in-common-dir path is reachable by sibling worktrees and by the worker; out-of-tree placement keeps normal in-repo agent tooling away from control state. `<repo-id>` is derived from the resolved repository identity (canonical path or remote URL hash) and recorded in the manifest.
 - `manifest.json` records schema versions, repository identity, plan hash, effective limits, provider and audit profiles, rate-card identity, and the run worktree.
 - `plan.snapshot.md` is immutable after admission and verified by content hash before every transition.
 - `events/` contains monotonically sequenced immutable JSON events with event ID, previous hash, actor, timestamp, idempotency key, and schema version. Publication uses write, flush, and atomic rename.
@@ -400,6 +403,7 @@ The CLI exposes setup, start, list, status, resume, stop, inspect, resolve, and 
 
 ### Provider Accounting Contract
 
+- **v1 scope:** Subscription-only. The metered bullets below are retained as the v2 design and are NOT implemented in v1 (U4 and the metered legs of U2/U3/U6 are deferred — OIR-002).
 - Subscription profiles currently admit explicit Codex subscription and OpenCode Go configurations. They require bounded retries, record advisory telemetry when available, and stop on provider rate-limit, quota, authentication, or exhaustion errors.
 - Metered profiles require a gateway or adapter capability declaration covering cumulative token enforcement, USD calculation, durable usage, model identity, rate-card version, and bypass prevention.
 - The local gateway starts with OpenAI-compatible request/response paths used by OpenRouter, OpenCode Zen models on compatible endpoints, and direct DeepSeek API. Unsupported endpoint protocols fail setup rather than bypass the gateway.
@@ -422,9 +426,9 @@ The CLI exposes setup, start, list, status, resume, stop, inspect, resolve, and 
 
 - Protected assets are provider credentials, gateway and operator keys, budget reservations, journal and ledger integrity, repository content, evidence, and audit certification records.
 - Trust boundaries are operator-to-supervisor, supervisor-to-Paseo, worker sandbox, OpenCode-to-gateway, gateway-to-provider, and each process-to-control-store boundary. Localhost and a shared OS user are not trust boundaries by themselves.
-- The v1 threat model includes compromised repository instructions, a malicious delegated agent, unrelated local processes, browser-to-localhost requests, malicious provider responses, DNS or proxy manipulation, replay, and crash races.
-- The gateway binds only to numeric loopback addresses, authenticates every request, validates `Host` and origin behavior, disables redirects and environment proxies, and resolves only adapter-owned public destinations while rejecting private, loopback, link-local, reserved, metadata, and ambiguous addresses.
-- Authoritative records are authenticated with key material unavailable to workers. Hash chains provide ordering and corruption evidence but are not treated as protection from a same-user process that can rewrite the full chain.
+- The full threat model includes compromised repository instructions, a malicious delegated agent, unrelated local processes, browser-to-localhost requests, malicious provider responses, DNS or proxy manipulation, replay, and crash races. v1 NARROWS this: it does NOT claim to survive a malicious same-OS-user delegated agent or compromised repo instructions that direct the worker to tamper with control state or exfiltrate credentials; it claims to survive honest bugs, crashes, session loss, and non-adversarial local process calls. The full threat model is a v2 target gated on a real sandbox (OIR-001).
+- The gateway binds only to numeric loopback addresses, authenticates every request, validates `Host` and origin behavior, disables redirects and environment proxies, and resolves only adapter-owned public destinations while rejecting private, loopback, link-local, reserved, metadata, and ambiguous addresses. (v2 — no gateway in v1.)
+- Authoritative records are authenticated with key material unavailable to workers' delegated environments (the worker env is scrubbed). Hash chains provide ordering and corruption EVIDENCE; under the narrowed v1 threat model they are not relied on as protection from a malicious same-OS-user process that can rewrite the full chain (that is v2 — OIR-001).
 - Structured diagnostics omit request and response bodies, credentials, environment content, and credential-bearing URLs. Logging is bounded, control-character safe, separate from the accounting ledger, and fail-closed when an authoritative debit cannot be persisted.
 
 ### Sequencing
@@ -432,7 +436,7 @@ The CLI exposes setup, start, list, status, resume, stop, inspect, resolve, and 
 1. Prove the isolation, credential-separation, local-authentication, and control-store permission contract on each supported host/provider profile.
 2. Establish schemas, event-store invariants, and provider-profile validation before integrating Paseo.
 3. Add subscription execution and deterministic reconciliation before metered execution.
-4. Add the metered gateway and prove reservation enforcement with fake-provider contract tests before real provider smoke tests.
+4. v2 — Add the metered gateway and prove reservation enforcement with fake-provider contract tests before real provider smoke tests. (Skipped in v1; subscription-only.)
 5. Add evidence validation and audit certification before allowing any step to transition to complete.
 6. Expose the complete workflow through the skill and thin command only after deterministic operations are stable.
 
@@ -444,24 +448,24 @@ The CLI exposes setup, start, list, status, resume, stop, inspect, resolve, and 
 - **Paseo lifecycle and logs are not completion authority.** Structured envelopes, native persistence handles, and Git fingerprints are required before transitions.
 - **Model-based calibration is nondeterministic.** Certification uses repeated fixed fixtures, an asymmetric zero-false-pass bar, profile pinning, and ongoing human sampling.
 - **Run control files are machine-local.** They survive sessions and worktrees on one host but not repository transfer; export/import and remote Paseo remain deferred.
-- **A worker can bypass accounting or rewrite authority if its sandbox exposes shared credentials or control state.** Setup proves isolation and credential separation for each supported profile; failing profiles are inadmissible.
-- **A loopback gateway can still become an open proxy or SSRF primitive.** Adapter-owned destinations, scoped capabilities, strict request parsing, DNS validation, redirect refusal, and disabled environment proxies constrain forwarding.
-- **Local callers could forge operator decisions.** Privileged mutations require operator-presence authorization bound to the run, operation, facts, nonce, and current journal head.
+- **A worker can bypass accounting or rewrite authority if its sandbox exposes shared credentials or control state.** v1 MITIGATION (narrowed): worktree isolation from sibling runs, control state stored out of the git common dir, worker env scrubbed of supervisor/operator secrets, and hash-chain tamper EVIDENCE. v1 RESIDUAL: a malicious same-OS-user delegated agent can still reach the out-of-tree control store and rewrite the chain; this is an ACCEPTED v1 limitation, not a silently lowered rule (v2 hardening via OIR-001).
+- **A loopback gateway can still become an open proxy or SSRF primitive.** (v2 — no gateway in v1.) Adapter-owned destinations, scoped capabilities, strict request parsing, DNS validation, redirect refusal, and disabled environment proxies constrain forwarding; the full hardening is implemented with U4 in v2.
+- **Local callers could forge operator decisions.** Privileged mutations require operator-presence authorization bound to the run, operation, facts, nonce, and current journal head. v1 mechanism: one-shot capability minted by the deterministic CLI and confirmed in the active OpenCode TUI, absent from worker env. Under the narrowed v1 threat model this resists non-adversarial local process calls; resisting a malicious same-OS-user agent is v2 (OIR-001).
 - **Secrets can leak through evidence or diagnostics.** Structured allowlisted fields, size limits, synthetic canary tests, and owner-only storage replace reliance on a post-hoc text scan.
 
 ---
 
 ## Implementation Units
 
-### U8. Security feasibility and isolation contract
+### U8. Security feasibility and isolation contract (v1 narrowed)
 
-- **Goal:** Prove that supported Paseo/provider profiles can isolate delegated workers from supervisor authority, credentials, operator controls, other runs, and direct metered-provider access.
-- **Requirements:** R5, R9-R11, R20-R21, R24.
+- **Goal:** Prove the supported v1 Paseo/provider profile (Windows + local Paseo + OpenCode Go subscription impl + OpenCode Go subscription audit) enforces the narrowed v1 worker trust boundary: worktree separation from sibling runs, control state stored out of the git common dir, worker env scrubbed of supervisor/operator secrets and the operator-presence capability, and owner-only ACLs on the control store. Full KTD11 sandbox isolation is a v2 hardening item (OIR-001).
+- **Requirements:** R5, R9-R11, R24 (v1 legs).
 - **Files:** `src/skills/open-skills-agent-ops/paseo-plan-supervisor/scripts/security.py`, `src/skills/open-skills-agent-ops/paseo-plan-supervisor/references/security-contract.md`, `src/skills/open-skills-agent-ops/paseo-plan-supervisor/tests/test_security.py`, `src/skills/open-skills-agent-ops/paseo-plan-supervisor/tests/fixtures/security/`.
-- **Approach:** Define host/provider isolation profiles, minimized worker environments, isolated OpenCode auth/config homes, owner-only control paths, gateway-only upstream credentials, and separate operator authorization. Treat same-user discretionary access controls as insufficient unless the provider sandbox demonstrably denies the path.
+- **Approach:** Define the v1 isolation profile: worktree mode + out-of-tree owner-only control store + scrubbed worker env. Verify the control store is NOT under the repo or git common dir, that sibling worktrees cannot reach each other's checkout paths via normal traversal, that the worker delegation env omits supervisor/operator secrets and the operator-presence capability, and that the control store dir has owner-only permissions. Do NOT claim to deny a malicious same-OS-user process.
 - **Dependencies:** None.
-- **Test scenarios:** Worker cannot read or mutate control state, credentials, signing keys, other worktrees, or operator authorization; direct provider calls fail; non-loopback Paseo is rejected; permissive ACL, symlink, junction, reparse-point, hard-link, or owner substitution stops setup; worker cannot resolve conflicts or raise budgets.
-- **Verification:** Security feasibility tests pass for each declared supported host/provider profile before any live delegation or gateway test runs.
+- **Test scenarios:** Sibling worktree cannot reach another run's worktree checkout via normal traversal; control store is outside the repo and git common dir; worker env contains no supervisor/operator secrets or operator-presence capability; owner-only ACL on control store holds; permissive ACL, symlink, junction, reparse-point, hard-link, or owner substitution in the control store path stops setup; non-loopback Paseo binding is rejected; worker cannot invoke privileged mutations (no capability in env).
+- **Verification:** v1 isolation tests pass for the declared supported profile before any live delegation. The full sandbox feasibility gate is deferred to v2 (OIR-001).
 
 ### U1. Deterministic run-state core
 
@@ -470,18 +474,18 @@ The CLI exposes setup, start, list, status, resume, stop, inspect, resolve, and 
 - **Files:** `src/skills/open-skills-agent-ops/paseo-plan-supervisor/scripts/supervisor.py`, `src/skills/open-skills-agent-ops/paseo-plan-supervisor/scripts/supervisor_core.py`, `src/skills/open-skills-agent-ops/paseo-plan-supervisor/references/state-and-event-contract.md`, `src/skills/open-skills-agent-ops/paseo-plan-supervisor/tests/test_state_store.py`.
 - **Approach:** Use Python standard-library data types, JSON, hashing, file locking primitives with explicit platform branches, and same-directory atomic file replacement. Keep the CLI adapter thin and make the reducer pure enough to replay fixtures deterministically. Model admission, operator stop, and final closure as idempotent transitions rather than presentation-side behavior.
 - **Dependencies:** U8.
-- **Test scenarios:** Legal and illegal transitions; forged, uncertified, or duplicate approvals; later-step dispatch attempted from every non-complete current-step state; duplicate idempotency keys; fault injection after every admission write; crash before and after event publication; operator stop from each active state; late result after stop; interrupted final closure; missing, truncated, reordered, or hash-chain-breaking events; deleted projection rebuild; changed plan snapshot; simultaneous lock attempts; stale lock requiring attention; Git worktree common-directory resolution.
+- **Test scenarios:** Legal and illegal transitions; forged, uncertified, or duplicate approvals; later-step dispatch attempted from every non-complete current-step state; duplicate idempotency keys; fault injection after every admission write; crash before and after event publication; operator stop from each active state; late result after stop; interrupted final closure; missing, truncated, reordered, or hash-chain-breaking events; deleted projection rebuild; changed plan snapshot; simultaneous lock attempts; stale lock requiring attention; control-store path resolution independent of the git common dir; out-of-tree control store not reachable via repo or common-dir traversal under the v1 isolation profile.
 - **Verification:** The state-store test module passes repeatedly with identical projections and no network or model dependency.
 
 ### U2. Configuration and provider capability profiles
 
-- **Goal:** Implement setup, precedence, validation, and immutable admission records for subscription and metered roles.
+- **Goal:** Implement setup, precedence, validation, and immutable admission records for subscription roles. (Metered roles and the metered adapter/rate-card validation are deferred to v2.)
 - **Requirements:** R3-R5, R16, R19-R21.
 - **Files:** `src/skills/open-skills-agent-ops/paseo-plan-supervisor/scripts/supervisor_core.py`, `src/skills/open-skills-agent-ops/paseo-plan-supervisor/references/configuration.md`, `src/skills/open-skills-agent-ops/paseo-plan-supervisor/references/provider-profiles.md`, `src/skills/open-skills-agent-ops/paseo-plan-supervisor/tests/test_provider_profiles.py`, `src/skills/open-skills-agent-ops/paseo-plan-supervisor/tests/fixtures/config/`.
 - **Approach:** Require explicit role classification and pin provider CLI, model, authentication class, accounting adapter, and rate-card identities in the admitted manifest. Implement run override over repository default precedence without reading mutable preferences after admission.
 - **Dependencies:** U8, U1. Final runnable readiness also depends on U5 certification.
-- **Test scenarios:** Codex and OpenCode Go subscription profiles without budgets; subscription profile with retry limit missing; unknown provider class; metered profile missing token or cost limits; metered adapter version mismatch; mixed subscription/metered roles; auto-reload or balance fallback enabled; absent, expired, changed, or decertified audit profile; override precedence; changed configuration after admission.
-- **Verification:** Fixture-driven setup and admission tests prove that valid subscription profiles pass, incomplete metered profiles fail closed, and manifests remain immutable.
+- **Test scenarios (v1):** Codex and OpenCode Go subscription profiles without budgets; subscription profile with retry limit missing; unknown provider class; absent, expired, changed, or decertified audit profile; override precedence; changed configuration after admission. (v2 scenarios — metered profile missing token or cost limits, metered adapter version mismatch, mixed subscription/metered roles, auto-reload or balance fallback — retained in `provider-profiles.md` for v2, not implemented in v1.)
+- **Verification:** Fixture-driven setup and admission tests prove that valid subscription profiles pass, incomplete metered profiles fail closed (validation code retained for v2), and manifests remain immutable.
 
 ### U3. Paseo delegation and lifecycle adapter
 
@@ -495,6 +499,7 @@ The CLI exposes setup, start, list, status, resume, stop, inspect, resolve, and 
 
 ### U4. Metered accounting gateway
 
+- **DEFERRED TO v2 (subscription-only v1 decision — OIR-002).**
 - **Goal:** Enforce metered delegation reservations for supported OpenAI-compatible provider endpoints and persist authoritative usage independently of Paseo.
 - **Requirements:** R5, R19-R21, R23-R24, AE3, AE11.
 - **Files:** `src/skills/open-skills-agent-ops/paseo-plan-supervisor/scripts/metering_gateway.py`, `src/skills/open-skills-agent-ops/paseo-plan-supervisor/scripts/supervisor_core.py`, `src/skills/open-skills-agent-ops/paseo-plan-supervisor/references/metering-gateway.md`, `src/skills/open-skills-agent-ops/paseo-plan-supervisor/tests/test_metering_gateway.py`, `src/skills/open-skills-agent-ops/paseo-plan-supervisor/tests/fixtures/provider/`.
@@ -515,12 +520,12 @@ The CLI exposes setup, start, list, status, resume, stop, inspect, resolve, and 
 
 ### U6. Reconciliation and operator controls
 
-- **Goal:** Expose safe discovery, status, resume, stop, inspection, conflict resolution, and authorized budget changes from a fresh session.
+- **Goal:** Expose safe discovery, status, resume, stop, inspection, conflict resolution, and advisory budget surfacing from a fresh session. (Authorized budget CHANGES are metered-only and deferred to v2; v1 surfaces subscription usage advisorially and applies only retry-limit changes.)
 - **Requirements:** R1, R22-R30.
 - **Files:** `src/skills/open-skills-agent-ops/paseo-plan-supervisor/scripts/supervisor.py`, `src/skills/open-skills-agent-ops/paseo-plan-supervisor/scripts/supervisor_core.py`, `src/skills/open-skills-agent-ops/paseo-plan-supervisor/references/reconciliation.md`, `src/skills/open-skills-agent-ops/paseo-plan-supervisor/tests/test_reconciliation.py`.
 - **Approach:** List candidates without auto-selection, refresh all external observations before decisions, compare them to derived state, and require explicit append-only operator events for conflicts or limit changes. Timeouts and unknown states become attention, not failure or completion.
 - **Dependencies:** U1-U5.
-- **Test scenarios:** Multiple unfinished runs; explicit selection; repeated idempotent resume; completed-but-unaudited work; active prior delegation; unknown outcome; bind discovered delegation; consume unresolved reservation; accept or reject evidence; non-overridable snapshot conflict; authorized, stale-head, and unauthorized resolutions or budget changes; crash after resolution before continuation; pending permission; subscription exhaustion by role and lifecycle phase; interrupted successful and incomplete closure; final summary completeness.
+- **Test scenarios (v1):** Multiple unfinished runs; explicit selection; repeated idempotent resume; completed-but-unaudited work; active prior delegation; unknown outcome; bind discovered delegation; accept or reject evidence; non-overridable snapshot conflict; authorized, stale-head, and unauthorized resolutions; retry-limit changes; crash after resolution before continuation; pending permission; subscription exhaustion by role and lifecycle phase; interrupted successful and incomplete closure; final summary completeness. (v2 scenarios — consume unresolved metered reservation, authorized metered budget changes — retained for v2.)
 - **Verification:** Table-driven reconciliation tests cover every lifecycle state and conflict source, followed by session-loss acceptance tests in a disposable repository.
 
 ### U7. Skill, command, documentation, and end-to-end acceptance
@@ -530,7 +535,7 @@ The CLI exposes setup, start, list, status, resume, stop, inspect, resolve, and 
 - **Files:** `dotfiles/opencode/commands/paseo-supervise.md`, `src/skills/open-skills-agent-ops/paseo-plan-supervisor/SKILL.md`, `docs/AGENTS.md`, `docs/README.md`, `src/skills/open-skills-agent-ops/paseo-plan-supervisor/tests/test_cli.py`, `src/skills/open-skills-agent-ops/paseo-plan-supervisor/tests/test_acceptance.py`.
 - **Approach:** Keep the command to skill loading only. The skill resolves setup/start/resume intent, invokes deterministic operations, delegates only authorized prompts, and reports remaining limits and attention states. Document that one CE unified plan advances from specification-stage `requirements-only` to executable `implementation-ready` in place.
 - **Dependencies:** U8, U1-U6.
-- **Test scenarios:** Every acceptance example; command discovery; setup on a fresh repository; subscription execution; rejected unsupported metered profile; metered execution through the fake gateway; audit rejection and retry; crash and resume at each delegation boundary; successful final closure; no secret material in control artifacts.
+- **Test scenarios (v1):** Subscription acceptance examples (AE1, AE2, AE4-AE9, AE12-AE14); command discovery; setup on a fresh repository; subscription execution; audit rejection and retry; crash and resume at each delegation boundary; successful final closure; no secret material in control artifacts. (v2 scenarios — rejected unsupported metered profile, metered execution through the fake gateway, AE3/AE10/AE11 — retained for v2.)
 - **Verification:** All unit and acceptance tests pass, the installed skill is discoverable, the command delegates to it, and a disposable end-to-end run survives loss of the initiating OpenCode session.
 
 ---
@@ -540,33 +545,35 @@ The CLI exposes setup, start, list, status, resume, stop, inspect, resolve, and 
 | Gate | Command or method | Applies to | Done signal |
 | --- | --- | --- | --- |
 | Python syntax | Resolve an available Python interpreter, then run `-m compileall src/skills/open-skills-agent-ops/paseo-plan-supervisor/scripts` | U1-U8 | All modules compile without errors. |
-| Deterministic unit suite | Resolve an available Python interpreter, then run `-m unittest discover -s src/skills/open-skills-agent-ops/paseo-plan-supervisor/tests -p "test_*.py"` | U1-U8 | State, profile, security, adapter, gateway, audit, reconciliation, CLI, and acceptance tests pass. |
-| Isolation feasibility | Run the declared host/provider security profile tests before agent creation | U8, U2-U4 | Workers cannot reach control state, upstream credentials, operator authorization, other runs, or direct metered endpoints. |
+| Deterministic unit suite | Resolve an available Python interpreter, then run `-m unittest discover -s src/skills/open-skills-agent-ops/paseo-plan-supervisor/tests -p "test_*.py"` | U1-U8 | State, profile, security, adapter, audit, reconciliation, CLI, and acceptance tests pass. (v2 adds gateway tests.) |
+| v1 Isolation feasibility | Run the declared v1 security profile tests (worktree + out-of-tree owner-only control store + scrubbed worker env) before agent creation | U8, U1, U2, U3 | Sibling worktrees cannot reach each other; control store is outside the repo and git common dir; worker env has no supervisor/operator secrets or operator-presence capability; owner-only ACL on control store holds. (Full sandbox feasibility deferred to v2 — OIR-001.) |
 | Paseo fixture contracts | Run the adapter tests against version-pinned captured `paseo run --json`, `paseo ls -a -g --json`, and `paseo agent inspect --json` fixtures | U3, U6 | Every supported lifecycle shape maps to one explicit supervisor observation. |
 | Local daemon smoke | `paseo daemon status` followed by the disposable-repository acceptance path | U3, U6, U7 | The tested installed Paseo version creates, discovers, and resumes labeled agents without duplicate dispatch. |
-| Metered fault injection | Run `test_metering_gateway.py` against the bundled fake provider | U4 | No request bypasses reservation checks; crashes and missing usage retain full reservations. |
+| Metered fault injection | (v2 — deferred) Run `test_metering_gateway.py` against the bundled fake provider | U4 | v2 gate: no request bypasses reservation checks; crashes and missing usage retain full reservations. |
 | Audit calibration | Run the configured audit profile against `tests/fixtures/audit-calibration/` | U5 | Zero blocker false approvals, at least 14/15 agreement, zero invalid-evidence approvals, and at most two false blocks. |
 | Lifecycle fault injection | Run admission, delegation, stop, resolution, and closure crash fixtures for implementation and audit roles | U1, U3, U6 | Resume produces one authoritative transition, never duplicates a delegation, and never advances a later step without certified approval. |
 | Skill validation | Invoke the installed skill in a fresh agent session against setup, start, resume, and conflict fixtures | U7 | Prose orchestration calls deterministic operations and never fabricates state transitions. |
-| Secret scan | Inspect generated manifests, events, evidence, fixtures, and test logs for credential material | U2, U4, U7 | No API key, bearer token, auth file content, or credential-bearing URL is persisted. |
+| Secret scan | Inspect generated manifests, events, evidence, fixtures, and test logs for credential material | U2, U7 | No API key, bearer token, auth file content, or credential-bearing URL is persisted. (v2 adds U4 gateway artifacts.) |
 | Documentation consistency | Review `docs/AGENTS.md`, `docs/README.md`, and this plan together | U7 | All three describe the unified-plan lifecycle without requiring a separate approved spec. |
 
-Live metered-provider smoke tests are opt-in because they incur cost. The fake-provider suite is the required deterministic gate; a live smoke uses a low explicit budget and records only redacted evidence.
+v1 deterministic gates are the subscription acceptance path, the audit-calibration gate, and the v1 isolation tests. Live metered-provider smoke tests are DEFERRED to v2 (subscription-only v1); the v2 fake-provider suite is the required deterministic gate and a live smoke uses a low explicit budget and records only redacted evidence.
 
 ---
 
 ## Definition of Done
 
-- The Product Contract changes are traceable to the confirmed provider-class and audit-calibration decisions, and no launch-blocking question remains.
-- Every implementation unit's named tests and verification gate passes on the supported host platforms.
+- The Product Contract changes are traceable to the confirmed provider-class and audit-calibration decisions PLUS the 2026-07-28 v1 scope decision (subscription-only + narrowed worker trust boundary), and no launch-blocking question remains for v1.
+- Every v1 implementation unit's named tests and verification gate pass on the supported host (Windows) platform.
 - A subscription-backed Codex or OpenCode Go run can execute sequentially, survive session loss, and close only after certified independent audit.
-- A metered OpenAI-compatible run cannot forward requests beyond its reserved token or cost capacity and stops on unverifiable settlement.
-- Supported worker profiles prove isolation from supervisor authority and real provider credentials; unsupported host/provider combinations fail setup.
+- (v2) A metered OpenAI-compatible run cannot forward requests beyond its reserved token or cost capacity and stops on unverifiable settlement. v1 is subscription-only; metered DoD items are v2.
+- v1 isolation: the supported profile (Windows + OpenCode Go subscription impl + audit) proves worktree separation from sibling runs, an out-of-tree owner-only control store, and a worker env scrubbed of supervisor/operator secrets. v1 does NOT claim to survive a malicious same-OS-user delegated agent; a real OS/container sandbox (full KTD11) and credential separation from a same-OS-user worker are v2 (OIR-001).
 - Event replay deterministically rebuilds status after crashes, projection deletion, and fresh-session resume.
 - Paseo lifecycle, test output, commits, and worker claims cannot independently complete a step.
 - The audit profile meets the calibration bar and decertifies correctly after a simulated false approval.
 - Operator actions are available from a fresh session without fuzzy run selection or hidden state mutation.
-- Operator stop, conflict resolution, budget changes, and final closure are authenticated, append-only, idempotent, and recoverable after interruption.
+- Operator stop, conflict resolution, retry-limit changes, and final closure are authenticated (one-shot operator-presence capability), append-only, idempotent, and recoverable after interruption. (Authorized metered budget changes are v2.)
 - Repository documentation recognizes the unified plan as both approved specification and implementation plan at different readiness stages.
 - Generated control state and evidence contain no secrets or unrelated personal information.
+- v1 documented limitation: does not survive a malicious same-OS-user delegated agent (compromised repo instructions or instruction injection targeting control state / credential exfiltration); tracked as v2 hardening (OIR-001).
+- v1 scope: metered execution (U4 + metered legs of U2/U3/U6) deferred to v2 (OIR-002); the full Product Contract remains the v2 target.
 - Dead-end experiments, temporary fixtures, orphaned agents, disposable worktrees, and abandoned implementation code are removed before completion.
