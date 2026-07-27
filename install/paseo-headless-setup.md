@@ -90,26 +90,29 @@ Set up Paseo as a headless daemon that starts automatically when you log in, wit
    paseo daemon stop
    ```
 
-6. **Register to auto-start at login**
+6. **Register to auto-start at login via Task Scheduler**
 
-   Create the launcher and register it in the HKCU Run key (no admin required).
-   The batch wrapper explicitly includes `C:\Program Files\nodejs` in PATH so `node` is found even if the user env hasn't fully loaded yet:
+   Create a scheduled task that runs `paseo daemon start` at user logon.
+   PowerShell's `Register-ScheduledTask` uses the Task Scheduler COM API
+   (not `schtasks.exe`), so it avoids the 261-char argument limit.
+   Paths are resolved at registration time so the task works even before
+   the shell profile is fully loaded:
 
    ```powershell
-   $dir = "$env:USERPROFILE\.config\paseo"
-   New-Item -ItemType Directory -Path $dir -Force
-   @"
-   cmd /c set PASEO_HOME=%USERPROFILE%\.paseo && set PATH=C:\Program Files\nodejs;%PATH% && %APPDATA%\npm\paseo.cmd daemon start
-   "@ | Set-Content "$dir\launch.bat"
-   @"
-   CreateObject("Wscript.Shell").Run "$env:USERPROFILE\.config\paseo\launch.bat", 0, False
-   "@ | Set-Content "$dir\launch.vbs"
-   New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "PaseoDaemon" -Value "wscript.exe //NoLogo $dir\launch.vbs" -PropertyType String -Force
+   $nodePath = (Get-Command node).Source
+   $paseoBin = "$env:APPDATA\npm\node_modules\@getpaseo\cli\bin\paseo"
+   $action = New-ScheduledTaskAction -Execute $nodePath `
+     -Argument "--disable-warning=DEP0040 `"$paseoBin`" daemon start"
+   $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+   $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+   Register-ScheduledTask -TaskName "PaseoDaemon" -Action $action -Trigger $trigger -Settings $settings -RunLevel Highest -Force
    ```
+
+   > `-RunLevel Highest` runs the daemon with elevated privileges (required for binding any port or network interface). The task runs in the user's session so `USERPROFILE` and other user env vars are available — `PASEO_HOME` defaults to `~/.paseo` automatically.
 
 7. **Verify the registration**
    ```powershell
-   Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "PaseoDaemon"
+   Get-ScheduledTask -TaskName "PaseoDaemon" | Format-List TaskName, State, Actions, Triggers
    ```
 
 8. **Reboot and confirm**
@@ -129,14 +132,14 @@ Set up Paseo as a headless daemon that starts automatically when you log in, wit
 | Component | Detail |
 |---|---|
 | CLI | `@getpaseo/cli` via npm — no desktop app dependency |
-| Auto-start mechanism | HKCU Run key + VBS launcher (hidden window, no admin) |
+| Auto-start mechanism | Task Scheduler — runs `paseo daemon start` via node at user logon |
 | Config | `~/.paseo/config.json` — listen, web UI, password |
 | Web UI | Daemon-served at `http://<ip>:6767` (login screen without auth, API behind password) |
 | Password | bcrypt hash in config.json, set via `paseo daemon set-password` |
 
 ## Troubleshooting
 
-- **Daemon not running after login**: Check the Run key is registered (`Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "PaseoDaemon"`). The VBS launcher is at `~\.config\paseo\launch.vbs`.
+- **Daemon not running after login**: Check the scheduled task exists and is enabled (`Get-ScheduledTask -TaskName "PaseoDaemon"`).
 - **Web UI loads but can't connect**: Make sure the browser can reach the IP/port. Check Windows firewall for port 6767.
-- **Daemon can't find config**: Verify `PASEO_HOME` is set in the VBS launcher command and points to the right directory.
-- **Two daemons running**: The VBS launcher starts a new daemon on each login. Paseo handles PID file conflicts gracefully; the older process becomes stale and is cleaned up.
+- **Daemon can't find config**: Verify `PASEO_HOME` is correct or `~/.paseo/config.json` exists.
+- **Two daemons running**: Each login creates a new daemon process. Paseo handles PID file conflicts gracefully; the older process becomes stale and is cleaned up.
