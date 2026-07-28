@@ -67,3 +67,5 @@ These are only needed if you use the corresponding skill:
 | **DaVinci Resolve** | nle-assistant | Video editing via Python scripting API |
 | **Chrome / CDP** | browser-qa | Browser automation for QA testing |
 | **psmux** | visible-delegation | Windows terminal multiplexer (tmux equivalent). Install: `winget install psmux` — docs: https://psmux.pages.dev/ |
+| **docx-cli** | docx editing | AI-agent-friendly CLI for reading, editing, commenting, and redlining .docx files while preserving formatting, tracked changes, and comments. Agent skill available. Install: `bun add -g bun-docx` or standalone binary via `curl -fsSL https://raw.githubusercontent.com/kklimuk/docx-cli/main/install.sh \| sh`. Repo: https://github.com/kklimuk/docx-cli |
+| **pandoc** | docx conversion (alternative) | Universal document converter (docx ↔ md ↔ html ↔ pdf). Lossy round-trips (no tracked changes/comments). Install: `winget install pandoc` |
