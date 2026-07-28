@@ -35,3 +35,6 @@ output-html/
 external/opencode/
 external/compound-engineering/
 external/.repo-update-status.json
+
+# Worktrees
+.worktrees/
