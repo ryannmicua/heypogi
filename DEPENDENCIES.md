@@ -34,8 +34,6 @@ Installed via `npm install` in the project-level and config-level `package.json`
 Loaded at runtime by OpenCode config (`dotfiles/opencode/opencode.json`):
 
 | Plugin | Source | Purpose |
-|---|---|---|
-| **superpowers** | `github.com/obra/superpowers.git` | Skill system for brainstorming, planning, TDD, debugging, and more |
 
 ## External repos (cloned sources)
 
