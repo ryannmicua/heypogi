@@ -26,6 +26,14 @@ if (-not $hasNode -or -not $hasNpm) {
   exit 1
 }
 
+# ---------- require npm 12+ (for --allow-scripts) ----------
+$npmVersion = (& npm --version 2>$null | Select-Object -Last 1)
+if (-not $npmVersion -or [version]$npmVersion -lt [version]"12.0.0") {
+  Write-Host "npm 12+ is required for the --allow-scripts flag. Current: $npmVersion" -ForegroundColor Red
+  Write-Host "Update with: npm install -g npm@latest" -ForegroundColor Yellow
+  exit 1
+}
+
 # ---------- kill running opencode ----------
 $procs = Get-Process "opencode" -ErrorAction SilentlyContinue
 if ($procs) {
@@ -46,9 +54,6 @@ if ($currentPath) {
   if (-not $currentVersion) { $currentVersion = $null }
 }
 
-# ---------- allow postinstall script ----------
-npm config set allow-scripts=opencode-ai --location=user 2>$null
-
 # ---------- install / update ----------
 if (-not $Quiet) {
   if ($currentVersion) {
@@ -58,7 +63,10 @@ if (-not $Quiet) {
   }
 }
 
-$out = npm install -g opencode-ai@latest 2>&1
+$out = & {
+  $ErrorActionPreference = "Continue"
+  npm install -g opencode-ai@latest --allow-scripts=opencode-ai 2>&1
+}
 $exitCode = $LASTEXITCODE
 $outString = $out | Out-String
 
