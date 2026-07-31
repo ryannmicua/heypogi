@@ -1,109 +1,107 @@
 ---
-description: Configure OpenChamber web server to run on login, listening on all interfaces at port 7777 with UI password auth
+description: Install, update, configure (0.0.0.0:7777 from settings file), start, and uninstall the OpenChamber web server from heypogi
 ---
 
-Set OpenChamber to start automatically on Windows login, bound to `0.0.0.0:7777`.
+Manage the OpenChamber web UI lifecycle from heypogi with one script: install, update, configure defaults from a settings file (server on `0.0.0.0:7777`), start/stop, and clean up.
 
-## Steps
+## Commands
 
-1. **Confirm OpenChamber is installed**
-   ```powershell
-   openchamber --version
-   ```
+| Command | What it does |
+|---------|--------------|
+| `install` | Install or update `@openchamber/web` globally via npm (stops a running instance first, allows native install scripts, re-runs `configure`). |
+| `update` | Alias for `install` (updates to latest and reconfigures). |
+| `configure` | Creates `~/.config/openchamber/settings.json` from the repo template, writes `startup.ps1` + `launch.vbs` wrappers, registers the HKCU Run key (auto-start on login), and sets `OPENCHAMBER_UI_PASSWORD` if a password is configured. Idempotent - safe to re-run. |
+| `serve` | Run in the foreground using settings from file (Ctrl+C to stop). |
+| `start` | Start detached/hidden via the VBS launcher and wait for health. |
+| `stop` | Stop the running instance (official `openchamber stop`, plus kill fallback on the configured port). |
+| `status` | Show version, settings, listening state, health, Run key, wrappers, password status. |
+| `uninstall` | Stop, remove Run key + wrappers + settings, and `npm uninstall -g @openchamber/web`. Use `-KeepSettings` / `-KeepPackage` to preserve either. |
 
-2. **User must set `OPENCHAMBER_UI_PASSWORD` as a persistent user env var**
-   Run this in PowerShell (replace `yourpassword`):
-   ```powershell
-   [Environment]::SetEnvironmentVariable("OPENCHAMBER_UI_PASSWORD", "yourpassword", "User")
-   ```
-
-3. **Create the startup wrapper script and VBS launcher**
-   ```powershell
-   $dir = "$env:USERPROFILE\.config\openchamber"
-   New-Item -ItemType Directory -Path $dir -Force
-   @"
-   & 'C:\Program Files\nodejs\node.exe' "$env:APPDATA\npm\node_modules\@openchamber\web\bin\cli.js" serve --foreground --port 7777 --host 0.0.0.0
-   "@ | Set-Content "$dir\startup.ps1"
-   @"
-   CreateObject("Wscript.Shell").Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -File " & CreateObject("Scripting.FileSystemObject").GetParentFolderName(WScript.ScriptFullName) & "\startup.ps1", 0, False
-   "@ | Set-Content "$dir\launch.vbs"
-   ```
-
-4. **Register via HKCU Run key** (no admin required)
-   ```powershell
-   New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "OpenChamber" -Value "wscript.exe //NoLogo $env:USERPROFILE\.config\openchamber\launch.vbs" -PropertyType String -Force
-   ```
-
-5. **Verify the registration**
-   ```powershell
-   Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "OpenChamber"
-   ```
-
-6. **Test by running the script**
-   ```powershell
-   powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.config\openchamber\startup.ps1"
-   ```
-
-7. **Confirm it's listening**
-   ```powershell
-   netstat -ano | Select-String ":7777"
-   curl -s http://localhost:7777/health
-   ```
-
-## Why this approach
-
-`openchamber startup enable` fails because `schtasks.exe` has a 261-char limit on the `/TR` argument and the generated command exceeds it. The registry `Run` key avoids this entirely and works per-user without admin rights.
-
-## Controlling OpenCode server startup
-
-OpenChamber normally starts its own OpenCode server as a sidecar. Use these env vars to control that behavior:
-
-| Env var | Scope | Effect |
-|---------|-------|--------|
-| `OPENCODE_SKIP_START=true` | CLI + Desktop | OpenChamber UI runs but **does not spawn** the OpenCode sidecar. Connect to an existing server by setting `OPENCODE_HOST` (full URL, e.g. `http://192.168.1.50:4096`) or `OPENCODE_HOST` + `OPENCODE_PORT` separately. |
-| `OPENCHAMBER_SKIP_OPENCODE_START=true` | CLI + Desktop | Alias for `OPENCODE_SKIP_START=true` (same behavior). |
-| `OPENCHAMBER_SKIP_LOCAL_SERVER=1` | Desktop only | Desktop app skips starting its in-process web server entirely (no UI served locally). Requires a remote instance in the host list. |
-
-Setting `OPENCHAMBER_SKIP_LOCAL_SERVER` and `OPENCODE_SKIP_START` together means the desktop starts nothing locally — it relies entirely on a remote instance for both UI and OpenCode.
-
-### CLI: Skip OpenCode sidecar (still serve UI)
+All commands take `-Quiet` (no prompts/output) and `-Force` (skip confirmation prompts). Run from PowerShell:
 
 ```powershell
-$env:OPENCODE_SKIP_START = "true"
+& "C:\Users\rmicua\myrepo\heypogi\install\scripts\openchamber.ps1" status
+```
+
+## Quick start (new machine)
+
+```powershell
+# 1. Install/update the npm package
+& "$env:HEYPOGI_ROOT\install\scripts\openchamber.ps1" install
+
+# 2. Optional: set a UI password for the browser interface
+#    (edit ~/.config/openchamber/settings.json and set "password")
+#    Or set the env var directly:
+#    [Environment]::SetEnvironmentVariable("OPENCHAMBER_UI_PASSWORD", "yourpassword", "User")
+
+# 3. Start it
+& "$env:HEYPOGI_ROOT\install\scripts\openchamber.ps1" start
+
+# 4. Verify
+& "$env:HEYPOGI_ROOT\install\scripts\openchamber.ps1" status
+```
+
+## Settings file
+
+OpenChamber itself has no config file for serve settings (port/host are CLI-flag only, password is an env var) - the script is the layer that reads them from a file:
+
+**Repo template:** `install/openchamber.settings.json` (committed defaults)
+**Machine copy:** `~/.config/openchamber/settings.json` (created on first `configure`, edit for machine-specific overrides; re-run `configure` after editing)
+
+| Key | Default | Effect |
+|-----|---------|--------|
+| `port` | `7777` | Web UI port |
+| `host` | `0.0.0.0` | Bind address (all interfaces) |
+| `autoStart` | `true` | Register HKCU Run key so OpenChamber starts on login |
+| `password` | `""` | If non-empty, written to `OPENCHAMBER_UI_PASSWORD` (user env). Empty means unmanaged. |
+
+The generated `startup.ps1` re-reads the machine settings file at launch, so you can also edit it without re-running `configure`.
+
+## Updating
+
+```powershell
+& "$env:HEYPOGI_ROOT\install\scripts\openchamber.ps1" install
+```
+
+The script stops the running daemon first - this matters: on Windows, npm cannot replace `better-sqlite3.node` while the server holds it (EPERM). It also configures npm `allow-scripts=better-sqlite3,node-pty` so the native addons build/install correctly.
+
+## Cleanup
+
+```powershell
+& "$env:HEYPOGI_ROOT\install\scripts\openchamber.ps1" uninstall
+```
+
+Stops the server, removes the Run key, deletes the wrappers and settings, and uninstalls the npm package.
+
+## Why the wrapper scripts exist
+
+- `openchamber startup enable` fails on Windows: `schtasks.exe` truncates the `/TR` argument at 261 chars and the generated command exceeds it. A HKCU `Run` key avoids this and needs no admin.
+- The wrappers (`~/.config/openchamber/startup.ps1` + `launch.vbs`) launch the server hidden and detached so it survives the launching shell. `launch.vbs` is what the Run key invokes.
+- The generated `startup.ps1` resolves `node.exe` and the npm-installed `cli.js` at configure time instead of hardcoding one machine layout.
+
+## Manual fallback (no repo)
+
+```powershell
+# password for the UI (persistent, optional)
+[Environment]::SetEnvironmentVariable("OPENCHAMBER_UI_PASSWORD", "yourpassword", "User")
+# foreground serve with the same settings
 openchamber serve --foreground --port 7777 --host 0.0.0.0
 ```
 
-The web UI runs but won't start OpenCode. Point it at an existing server by setting the full URL:
+## Controlling the OpenCode sidecar
+
+OpenChamber starts its own OpenCode server as a sidecar. Env vars to control that:
+
+| Env var | Scope | Effect |
+|---------|-------|--------|
+| `OPENCODE_SKIP_START=true` | CLI + Desktop | UI runs but does **not** spawn the OpenCode sidecar. Connect to an existing server via `OPENCODE_HOST` (full URL) or `OPENCODE_HOST` + `OPENCODE_PORT`. |
+| `OPENCHAMBER_SKIP_OPENCODE_START=true` | CLI + Desktop | Alias for the above. |
+| `OPENCHAMBER_SKIP_LOCAL_SERVER=1` | Desktop only | Desktop skips its in-process web server entirely; needs a remote instance in the host list. |
+
+Example - serve UI on 7777 but point at an existing OpenCode server:
 
 ```powershell
 $env:OPENCODE_SKIP_START = "true"
 $env:OPENCODE_HOST = "http://192.168.1.50:4096"
 openchamber serve --foreground --port 7777 --host 0.0.0.0
 ```
-
-Or set host and port separately:
-
-```powershell
-$env:OPENCODE_SKIP_START = "true"
-$env:OPENCODE_HOST = "192.168.1.50"
-$env:OPENCODE_PORT = "4096"
-openchamber serve --foreground --port 7777 --host 0.0.0.0
-```
-
-### Desktop: Skip local server entirely
-
-```powershell
-$env:OPENCHAMBER_SKIP_LOCAL_SERVER = "1"
-openchamber-desktop
-```
-
-The Electron app won't start its in-process server at all — it connects to a remote instance from its host list.
-
-### Desktop: Skip only the OpenCode sidecar
-
-```powershell
-$env:OPENCODE_SKIP_START = "true"
-openchamber-desktop
-```
-
-Desktop still serves its UI locally but won't spawn OpenCode. Useful when you have a dedicated OpenCode server elsewhere.
