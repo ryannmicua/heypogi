@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
   [Parameter(Position = 0)]
-  [ValidateSet("status", "install", "update", "fix", "start", "stop")]
+  [ValidateSet("status", "install", "update", "fix", "start", "stop", "help")]
   [string]$Command = "status",
   [switch]$Quiet,
   [switch]$Force
@@ -95,6 +95,9 @@ function Get-NpmBinary {
   $shimDir = Split-Path $ShimPath -Parent
   $candidate = Join-Path $shimDir (Join-Path "node_modules" $PackageRel)
   if (Test-Path -LiteralPath $candidate) { return $candidate }
+  # Get-Command may resolve straight to the real binary inside node_modules
+  # instead of the npm shim - accept it as-is when it already exists.
+  if ($ShimPath -match "node_modules" -and (Test-Path -LiteralPath $ShimPath)) { return $ShimPath }
   return $null
 }
 
@@ -652,6 +655,35 @@ function Invoke-Stop {
   Safe-Invoke -What "Stopping Paseo daemon" -Body { & paseo daemon stop }
 }
 
+# ---------- help ----------
+function Show-Help {
+  $exe = "check-dev-stack.ps1"
+  Write-Host "Usage: .\$exe [command] [options]" -ForegroundColor Cyan
+  Write-Host ""
+  Write-Host "Supervisor for the dev stack (OpenCode, OpenChamber, Paseo):" -ForegroundColor White
+  Write-Host "checks install state, runs services, keeps autostart + config healthy."
+  Write-Host ""
+  Write-Host "Commands:" -ForegroundColor Cyan
+  Write-Host "  status   Check everything and report issues (default). Exits 1 if issues found."
+  Write-Host "  install  Install or update all tools to latest, then configure autostart + config."
+  Write-Host "  update   Alias for install."
+  Write-Host "  fix      Auto-fix runtime issues (start services, register autostart, fix config)."
+  Write-Host "  start    Start OpenChamber and the Paseo daemon (if not running)."
+  Write-Host "  stop     Stop OpenChamber and the Paseo daemon."
+  Write-Host "  help     Show this help."
+  Write-Host ""
+  Write-Host "Options:" -ForegroundColor Cyan
+  Write-Host "  -Command <cmd>  Command to run (same as the positional argument)."
+  Write-Host "  -Quiet          Skip the npm latest-version lookups in 'status'."
+  Write-Host "  -Force          Apply config fixes without prompting."
+  Write-Host ""
+  Write-Host "Examples:" -ForegroundColor Cyan
+  Write-Host "  .\$exe                  # quick health check"
+  Write-Host "  .\$exe fix              # fix whatever is broken"
+  Write-Host "  .\$exe install -Force   # install/update everything, no prompts"
+  Write-Host "  .\$exe status -Quiet    # offline-friendly status check"
+}
+
 # ---------- dispatch ----------
 switch ($Command) {
   "status" {
@@ -665,4 +697,5 @@ switch ($Command) {
   "fix"     { Invoke-Fix }
   "start"   { Invoke-Start }
   "stop"    { Invoke-Stop }
+  "help"    { Show-Help }
 }
