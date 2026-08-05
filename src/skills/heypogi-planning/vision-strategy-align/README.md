@@ -21,6 +21,51 @@ Verifies that a repo's two grounding documents work together as one source of tr
 3. **Reports** a verdict: **aligned**, **drifted**, or **conflicted**. It never silently edits either document — fixes apply only with operator approval, and STRATEGY.md is fixed to match VISION.md, not the reverse.
 4. **Verifies the repo's agent instructions** (AGENTS.md / CLAUDE.md) carry the precedence convention and a check trigger, offering to add them if missing.
 
+## Example: a drifted strategy caught by the rubric
+
+**VISION.md** (operator-authored):
+
+```markdown
+# Vision
+Adventist office staff lose 30 min/day hunting answers across disconnected
+internal tools. We build **HeyPogi**, a single chat interface that answers
+questions from the org's SharePoint, email, and policy docs — no account
+needed beyond the org's existing SSO.
+```
+
+**STRATEGY.md** after a `ce-strategy` run (excerpts):
+
+```markdown
+---
+last_updated: 2026-08-03
+---
+
+## Target problem
+Staff waste time switching between tools to find information.
+
+## Key metrics
+1. Answers delivered per staff per day
+2. 30 min saved per staff per day (from VISION)
+3. 5,000 new users in Q3
+
+## Tracks
+- SharePoint & email connectors
+- Mobile app (iOS and Android)
+```
+
+**Alignment report:** **drifted** — not conflicted, but three checks fail:
+
+| # | Check | Result | Evidence |
+|---|-------|--------|----------|
+| 1 | Derivation header | pass | header declares VISION governs |
+| 2 | Traceability | fail | metric #3 ("5,000 new users") has no VISION anchor; VISION says "no account needed beyond SSO" — nothing about user-count targets |
+| 3 | No new scope | fail | "Mobile app" Track invents a platform VISION never mentions |
+| 4 | No contradiction | pass | audience and problem framing match |
+| 5 | Ownership | fail | metric #3 states a value, not a measurement definition — values belong in STRATEGY only as *measurement* notes, and this one is an invention, not a definition |
+| 6 | Freshness | pass | VISION last touched before `last_updated` |
+
+**Outcome:** the skill reports the drift and does **not** edit anything. The operator approves fixes; STRATEGY.md is corrected to match VISION.md — the mobile Track is dropped or the operator first updates VISION to adopt it, and the invented user-count metric is removed.
+
 ## Why it exists
 
 The CE plugin's `ce-strategy` skill has no concept of an upstream vision document and never reads `VISION.md`. CE's downstream skills consume STRATEGY.md directly (`ce-plan`, `ce-brainstorm`, `ce-ideate`, `ce-dogfood`, `ce-product-pulse`), so a drifted STRATEGY.md silently poisons planning, ideation, and QA. This skill makes vision→strategy consistency deliberate.
