@@ -48,6 +48,29 @@ function Safe-Invoke {
   }
 }
 
+# `paseo daemon start` inherits this shell's environment, and the daemon is
+# long-lived. When the script runs from inside an opencode/OpenChamber session
+# that env carries OPENCODE_SERVER_PASSWORD, which makes every opencode server
+# the daemon later spawns require Basic auth that Paseo itself never sends -
+# the provider list then fails with "Failed to fetch OpenCode providers: {}".
+# Strip the session-scoped vars for the duration of the call only; later checks
+# (eg. the OpenChamber password reminder) still need the original env.
+function Invoke-PaseoDaemon {
+  param([ValidateSet("start", "restart")][string]$Action)
+  $saved = @{}
+  foreach ($v in 'OPENCODE_SERVER_PASSWORD','OPENCODE_SERVER_USERNAME','OPENCODE_CONFIG_CONTENT','OPENCODE_PID','OPENCODE','AGENT') {
+    if (Test-Path "Env:$v") {
+      $saved[$v] = (Get-Item "Env:$v").Value
+      Remove-Item "Env:$v"
+    }
+  }
+  try {
+    & paseo daemon $Action
+  } finally {
+    foreach ($k in $saved.Keys) { Set-Item "Env:$k" $saved[$k] }
+  }
+}
+
 function Get-ListeningPid {
   param([int]$Port)
   $line = netstat -ano 2>$null | Select-String "0\.0\.0\.0:$Port\s+0\.0\.0\.0:0\s+LISTENING" | Select-Object -First 1
@@ -452,7 +475,7 @@ function Invoke-Ensure {
   # paseo: daemon not running -> start
   if (-not (Get-ListeningPid -Port $PaseoPort)) {
     Write-Host "Starting Paseo daemon..." -ForegroundColor Yellow
-    Safe-Invoke -What "Starting Paseo daemon" -Body { & paseo daemon start }
+    Safe-Invoke -What "Starting Paseo daemon" -Body { Invoke-PaseoDaemon start }
   }
   # paseo autostart -> register scheduled task
   $task = Get-ScheduledTask -TaskName $PaseoTaskName -ErrorAction SilentlyContinue
@@ -496,7 +519,7 @@ function Invoke-Ensure {
     if ($changed) {
       Set-Content -LiteralPath $paseoCfg -Value $raw -Encoding UTF8 -NoNewline
       Write-Host "Updated paseo config.json. Restarting daemon..." -ForegroundColor Yellow
-      Safe-Invoke -What "Restarting Paseo daemon" -Body { & paseo daemon restart }
+      Safe-Invoke -What "Restarting Paseo daemon" -Body { Invoke-PaseoDaemon restart }
     }
   }
   # paseo password reminder (interactive step, cannot be automated)
@@ -596,7 +619,7 @@ function Invoke-Install {
     }
     if ($toUpdate -contains "paseo") {
       Write-Host "Restarting Paseo daemon..." -ForegroundColor Cyan
-      Safe-Invoke -What "Restarting Paseo daemon" -Body { & paseo daemon start }
+      Safe-Invoke -What "Restarting Paseo daemon" -Body { Invoke-PaseoDaemon start }
     }
   } else {
     Write-Host ""
@@ -642,7 +665,7 @@ function Invoke-Start {
   }
   if (-not (Get-ListeningPid -Port $PaseoPort)) {
     Write-Host "Starting Paseo daemon..." -ForegroundColor Cyan
-    Safe-Invoke -What "Starting Paseo daemon" -Body { & paseo daemon start }
+    Safe-Invoke -What "Starting Paseo daemon" -Body { Invoke-PaseoDaemon start }
   } else {
     Write-Host "Paseo daemon already running." -ForegroundColor Green
   }
