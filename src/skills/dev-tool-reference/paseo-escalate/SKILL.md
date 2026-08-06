@@ -50,8 +50,23 @@ End with the no-edits suffix:
 This is analysis only. Do NOT edit, create, or delete any files. Do NOT write code.
 ```
 
+## Optional: writing findings to a report
+
+By default the advisor returns its findings in its reply and makes no file writes. If the calling agent wants a durable report, include this instruction in the briefing:
+
+```
+Write your findings to a report document. Save it to this exact path:
+<absolute path>. Do not write anywhere else.
+```
+
+Rules governing report writes:
+
+- **The calling agent specifies the location.** The escalated model never chooses the path. The calling agent must state an exact absolute path in the briefing when a report is wanted.
+- **No location, no write.** If the escalated model is told to write findings down but the briefing does not contain an explicit location, it must ask the calling agent where to save the file and wait for the answer before continuing. It must not guess a path, derive one from the repo, or proceed to write.
+- **One write exception only.** The escalated model may write a report only to the caller-specified path. All other edits remain prohibited by the no-edits suffix.
+
 ## Launch and synthesize
 
-Create the advisor agent via Paseo with a `[Escalate] <topic>` title, the briefing as the initial prompt, and `settings: { thinkingOptionId: "max" }`. Wait for it to finish. Read its response. Synthesize for the user — the advisor's verdict plus your recommendation — then make the call yourself. Do not yield the decision to the advisor.
+Create the advisor agent via Paseo with a `[Escalate] <topic>` title, the briefing as the initial prompt, and `settings: { thinkingOptionId: "max" }`. Wait for it to finish. Read its response (and the report file, if one was requested). Synthesize for the user — the advisor's verdict plus your recommendation — then make the call yourself. Do not yield the decision to the advisor.
 
 Archive the agent when done, or keep it for follow-ups if the topic is still open.
