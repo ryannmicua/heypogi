@@ -57,11 +57,14 @@ are printed before installing.
 | Detect version | Runs `paseo --version` (skipped if not installed). |
 | Handle daemon | If `paseo daemon status` reports running, asks to stop it (kills running agents — prompts unless `-Quiet` with no agents). |
 | npm install | `npm install -g @getpaseo/cli@beta` or `@latest` — newest of the `latest` and `beta` dist-tags. |
+| Restart daemon | If the script stopped the daemon for the upgrade, it restarts it automatically with session env vars stripped (`OPENCODE_SERVER_PASSWORD` etc.) so spawned opencode servers don't require Basic auth. |
 | Verify | Runs `paseo --version` and prints result. |
 
 ## After an upgrade
 
-If the daemon was running, it must be restarted to pick up the new version:
+The daemon is restarted automatically when the script stopped it for the
+upgrade. You only need to restart manually if the script could not stop the
+daemon (e.g. `-Quiet` with running agents, which it refuses to stop):
 
 ```powershell
 paseo daemon start

@@ -84,6 +84,30 @@ function Select-NewestVersion {
   return $B
 }
 
+# Start/restart the daemon with session-scoped env vars stripped. The daemon is
+# long-lived and captures the environment it inherits at spawn time. When this
+# script runs inside an opencode/OpenChamber session, that environment carries
+# OPENCODE_SERVER_PASSWORD (and friends), which makes every opencode server the
+# daemon later spawns require Basic auth that Paseo never sends - the provider
+# then fails with "Failed to fetch OpenCode providers: {}". Strip those vars
+# for the duration of the call only, then restore them (the script continues
+# running after the call).
+function Invoke-PaseoDaemon {
+  param([ValidateSet("start", "restart")][string]$Action)
+  $saved = @{}
+  foreach ($v in 'OPENCODE_SERVER_PASSWORD','OPENCODE_SERVER_USERNAME','OPENCODE_CONFIG_CONTENT','OPENCODE_PID','OPENCODE','AGENT') {
+    if (Test-Path "Env:$v") {
+      $saved[$v] = (Get-Item "Env:$v").Value
+      Remove-Item "Env:$v"
+    }
+  }
+  try {
+    & paseo daemon $Action
+  } finally {
+    foreach ($k in $saved.Keys) { Set-Item "Env:$k" $saved[$k] }
+  }
+}
+
 # ---------- prereqs ----------
 $hasNode = Get-Command "node" -ErrorAction SilentlyContinue
 $hasNpm  = Get-Command "npm"  -ErrorAction SilentlyContinue
@@ -183,13 +207,27 @@ if (-not $Quiet) {
   if ($currentVersion -and $currentVersion -ne $newVersion) {
     Write-Host "Updated: $currentVersion -> $newVersion" -ForegroundColor Cyan
   }
-  if ($stopDaemon) {
+}
+
+# Auto-restart the daemon if this script stopped it for the upgrade (this also
+# covers -Quiet runs where the daemon was stopped with no agents running).
+# If the daemon was left running (e.g. -Quiet with agents, where the script
+# refuses to stop it), the user must restart it manually to pick up the new version.
+if ($stopDaemon) {
+  if (-not $Quiet) {
     Write-Host ""
-    Write-Host "Daemon was stopped for the upgrade. Start it again with: paseo daemon start"
-  } elseif ($daemonRunning) {
-    Write-Host ""
-    Write-Host "Note: the daemon is still running the old version. Restart it to pick up the new one: paseo daemon restart"
+    Write-Host "Restarting the daemon..." -ForegroundColor Cyan
   }
+  Invoke-PaseoDaemon start
+  if (-not $Quiet) {
+    Write-Host "Daemon restarted. Verify with: paseo daemon status" -ForegroundColor Green
+  }
+} elseif ($daemonRunning -and -not $Quiet) {
+  Write-Host ""
+  Write-Host "Note: the daemon is still running the old version. Restart it to pick up the new one: paseo daemon restart" -ForegroundColor Yellow
+}
+
+if (-not $Quiet) {
   Write-Host ""
   Write-Host "Verify with: paseo --version"
 }
