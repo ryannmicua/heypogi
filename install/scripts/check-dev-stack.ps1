@@ -495,16 +495,22 @@ function Collect-Status {
   $paseoDesktopExe = Join-Path $env:LOCALAPPDATA "Programs\Paseo\Paseo.exe"
   $paseoDesktopSettings = Join-Path $env:APPDATA "Paseo\desktop-settings.json"
   $desktopInstalled = Test-Path -LiteralPath $paseoDesktopExe
-  $desktopVer = if ($desktopInstalled) { Get-FileVersion -Path $paseoDesktopExe } else { $null }
   if ($desktopInstalled) {
-    Add-Check "Paseo" "Desktop version" $true $desktopVer
-    if ($desktopVer -and $latest.paseo) {
-      if (Test-VersionOutdated -Installed $desktopVer -Latest $latest.paseo) {
-        Add-Check "Paseo" "Desktop up to date" $false "installed $desktopVer, available $($latest.paseo) ($paseoDetail)"
-      } else {
-        Add-Check "Paseo" "Desktop up to date" $true "available $($latest.paseo) ($paseoDetail)"
+    $desktopVer = Get-FileVersion -Path $paseoDesktopExe
+    if ($desktopVer) {
+      Add-Check "Paseo" "Desktop version" $true $desktopVer
+      if ($latest.paseo) {
+        if (Test-VersionOutdated -Installed $desktopVer -Latest $latest.paseo) {
+          Add-Check "Paseo" "Desktop up to date" $false "installed $desktopVer, available $($latest.paseo) ($paseoDetail)"
+        } else {
+          Add-Check "Paseo" "Desktop up to date" $true "available $($latest.paseo) ($paseoDetail)"
+        }
       }
+    } else {
+      Add-Check "Paseo" "Desktop version" $false "exe present but version could not be read"
     }
+  } else {
+    Add-Check "Paseo" "Desktop version" $true "not installed"
   }
   $manageBuiltIn = $null
   if ($desktopInstalled -and (Test-Path -LiteralPath $paseoDesktopSettings)) {
