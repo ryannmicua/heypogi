@@ -76,7 +76,7 @@ daemons run side by side, which is exactly what we want to avoid.
 
 Per tool: CLI present on PATH, CLI resolves from npm (not a desktop app), the
 real binary path (resolved from the npm shim to `node_modules\...`), installed
-version vs. latest on npm, daemon running, listening on `0.0.0.0` (all
+version vs. available on npm, daemon running, listening on `0.0.0.0` (all
 interfaces, for remote access), health endpoint responding, and autostart
 registration:
 
@@ -93,6 +93,13 @@ Additional checks:
   `node_modules\@getpaseo\cli\bin\paseo` — plus the **running** daemon binary
   extracted from the live process command line (e.g.
   `...\@getpaseo\server\dist\server\server\daemon-worker.js`).
+- For Paseo, "available version" considers both the `latest` and `beta` npm
+  dist-tags and reports both; the newest of the two is used for the up-to-date
+  check and for installs. `install`/`install-paseo-cli.ps1` install
+  `@getpaseo/cli@beta` when it is newer than `latest`, else `@getpaseo/cli@latest`.
+- Paseo desktop app (if installed at `%LOCALAPPDATA%\Programs\Paseo\Paseo.exe`)
+  is checked for its own version against the same available versions, so a
+  stale desktop app is reported separately from a stale CLI.
 - OpenChamber process must be the npm `cli.js serve` server (not the desktop
   app); Paseo's listening process must be `daemon-worker.js`.
 - Paseo config (`~/.paseo/config.json`): `daemon.listen = 0.0.0.0:6767` and

@@ -17,6 +17,73 @@ function Read-Choice {
   }
 }
 
+# Query a specific npm dist-tag (e.g. "latest", "beta") - $null when it does not exist
+function Get-DistTagVersion {
+  param([string]$Package, [string]$Tag)
+  try {
+    $v = (& npm view $Package "dist-tags.$Tag" 2>$null | Select-Object -Last 1)
+    if ($v -and "$v" -match "^\d") { return "$v".Trim() }
+  } catch { }
+  return $null
+}
+
+# Split a semver-ish string into core version + prerelease suffix so that
+# "0.3.0-beta.2" and "0.2.5" can be compared correctly.
+function Get-VersionParts {
+  param([string]$Version)
+  $core = $Version
+  $suffix = ""
+  if ($Version -match "^(?<core>\d+(\.\d+){1,3})(?:-(?<suffix>.+))?$") {
+    $core = $matches["core"]
+    if ($matches["suffix"]) { $suffix = $matches["suffix"] }
+  }
+  return @{ Core = $core; Suffix = $suffix }
+}
+
+# Compare two package versions (release + prerelease aware).
+# Returns -1/0/1 when comparable, $null when they are not.
+function Compare-PkgVersion {
+  param([string]$A, [string]$B)
+  if ([string]::IsNullOrEmpty($A) -or [string]::IsNullOrEmpty($B)) { return $null }
+  $pa = Get-VersionParts -Version $A
+  $pb = Get-VersionParts -Version $B
+  try {
+    $ca = [version]$pa.Core
+    $cb = [version]$pb.Core
+  } catch { return $null }
+  $cmp = $ca.CompareTo($cb)
+  if ($cmp -ne 0) { return $cmp }
+  if ($pa.Suffix -eq $pb.Suffix) { return 0 }
+  if ($pa.Suffix -eq "") { return 1 }
+  if ($pb.Suffix -eq "") { return -1 }
+  $aseg = $pa.Suffix.Split(".")
+  $bseg = $pb.Suffix.Split(".")
+  $n = [Math]::Min($aseg.Length, $bseg.Length)
+  for ($i = 0; $i -lt $n; $i++) {
+    $ai = 0; $bi = 0
+    $aiIsNum = [int]::TryParse($aseg[$i], [ref]$ai)
+    $biIsNum = [int]::TryParse($bseg[$i], [ref]$bi)
+    if ($aiIsNum -and $biIsNum) {
+      if ($ai -ne $bi) { return $ai.CompareTo($bi) }
+    } else {
+      $c = [string]::Compare($aseg[$i], $bseg[$i], [System.StringComparison]::OrdinalIgnoreCase)
+      if ($c -ne 0) { return $c }
+    }
+  }
+  return $aseg.Length.CompareTo($bseg.Length)
+}
+
+# Newest of two versions (prerelease aware); falls back to whichever is non-null.
+function Select-NewestVersion {
+  param([string]$A, [string]$B)
+  if ([string]::IsNullOrEmpty($A)) { return $B }
+  if ([string]::IsNullOrEmpty($B)) { return $A }
+  $cmp = Compare-PkgVersion -A $A -B $B
+  if ($null -eq $cmp) { return $A }
+  if ($cmp -ge 0) { return $A }
+  return $B
+}
+
 # ---------- prereqs ----------
 $hasNode = Get-Command "node" -ErrorAction SilentlyContinue
 $hasNpm  = Get-Command "npm"  -ErrorAction SilentlyContinue
@@ -70,15 +137,29 @@ if ($stopDaemon) {
 }
 
 # ---------- install / update ----------
+# Prefer the newest of the stable (latest) and beta dist-tags.
+$pkgPaseo = "@getpaseo/cli"
+$paseoLatest = Get-DistTagVersion -Package $pkgPaseo -Tag "latest"
+$paseoBeta   = Get-DistTagVersion -Package $pkgPaseo -Tag "beta"
+$target      = Select-NewestVersion -A $paseoLatest -B $paseoBeta
+
+if (-not $target) {
+  Write-Host "Could not determine the latest @getpaseo/cli version from npm. Check your connection and re-run." -ForegroundColor Red
+  exit 1
+}
+
 if (-not $Quiet) {
   if ($currentVersion) {
     Write-Host "Current: paseo $currentVersion" -ForegroundColor Green
   } else {
     Write-Host "Paseo not installed yet." -ForegroundColor Yellow
   }
+  $tag = if ($target -eq $paseoBeta -and $target -ne $paseoLatest) { "beta" } else { "latest" }
+  Write-Host "Target: $target ($tag tag; latest $paseoLatest, beta $paseoBeta)" -ForegroundColor Cyan
 }
 
-$out = npm install -g @getpaseo/cli@latest 2>&1
+$installSpec = if ($target -eq $paseoBeta -and $target -ne $paseoLatest) { "@getpaseo/cli@beta" } else { "@getpaseo/cli@latest" }
+$out = npm install -g $installSpec 2>&1
 $exitCode = $LASTEXITCODE
 $outString = $out | Out-String
 
