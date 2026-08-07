@@ -1,12 +1,14 @@
 [CmdletBinding()]
 param(
   [Parameter(Position = 0)]
-  [ValidateSet("install", "update", "configure", "serve", "start", "stop", "status", "uninstall")]
+  [ValidateSet("install", "update", "configure", "serve", "start", "stop", "status", "uninstall", "help")]
   [string]$Command = "status",
   [switch]$Quiet,
   [switch]$Force,
   [switch]$KeepSettings,
-  [switch]$KeepPackage
+  [switch]$KeepPackage,
+  [Alias("h")]
+  [switch]$Help
 )
 
 $ErrorActionPreference = "Stop"
@@ -354,6 +356,30 @@ function Invoke-Status {
   }
 }
 
+function Invoke-Help {
+  Write-Host "openchamber.ps1 - manage the OpenChamber install/service" -ForegroundColor Green
+  Write-Host ""
+  Write-Host "Usage: openchamber.ps1 [command] [-Quiet] [-Force] [-KeepSettings] [-KeepPackage]"
+  Write-Host ""
+  Write-Host "Commands:"
+  Write-Host "  install    Install/update the @openchamber/web npm package, then configure."
+  Write-Host "  update     Alias for install."
+  Write-Host "  configure  Write settings.json (if missing), startup wrappers, and HKCU Run key."
+  Write-Host "  serve      Run the daemon in the foreground (Ctrl+C to stop)."
+  Write-Host "  start      Start OpenChamber in the background via the launch wrapper."
+  Write-Host "  stop       Stop the running OpenChamber instance."
+  Write-Host "  status     Show install/running/autostart status. (default when no command given)"
+  Write-Host "  uninstall  Stop, remove autostart + wrapper files, and uninstall the npm package."
+  Write-Host "  help       Show this message."
+  Write-Host ""
+  Write-Host "Flags:"
+  Write-Host "  -Quiet         Suppress non-essential output."
+  Write-Host "  -Force         Skip interactive confirmations (install)."
+  Write-Host "  -KeepSettings  Keep settings.json on uninstall."
+  Write-Host "  -KeepPackage   Keep the npm package on uninstall."
+  Write-Host "  -Help, -h      Show this message."
+}
+
 function Invoke-Uninstall {
   Stop-OpenChamberInstance
 
@@ -386,6 +412,7 @@ function Invoke-Uninstall {
 
 # ---------- dispatch ----------
 if ($Command -eq "update") { $Command = "install" }
+if ($Help) { $Command = "help" }
 
 switch ($Command) {
   "install"    { Invoke-Install }
@@ -395,4 +422,5 @@ switch ($Command) {
   "stop"       { Stop-OpenChamberInstance }
   "status"     { Invoke-Status }
   "uninstall"  { Invoke-Uninstall }
+  "help"       { Invoke-Help }
 }

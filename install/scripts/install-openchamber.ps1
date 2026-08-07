@@ -1,5 +1,8 @@
 [CmdletBinding()]
 param(
+  [Parameter(Position = 0)]
+  [ValidateSet("install", "update", "configure", "serve", "start", "stop", "status", "uninstall", "help")]
+  [string]$Command = "install",
   [switch]$Quiet,
   [switch]$Force
 )
@@ -18,19 +21,30 @@ function Read-Choice {
   }
 }
 
+# ---------- wrapper location ----------
+$wrapper = Join-Path $PSScriptRoot "openchamber.ps1"
+if (-not (Test-Path -LiteralPath $wrapper)) {
+  Write-Host "openchamber.ps1 not found next to this script: $wrapper" -ForegroundColor Red
+  exit 1
+}
+
+# ---------- non-install commands: pass straight through to openchamber.ps1 ----------
+# This script only adds prereq checks and a version banner around install/update.
+# For anything else (start, stop, status, ...) just delegate as-is.
+if ($Command -ne "install" -and $Command -ne "update") {
+  $delegateArgs = @($Command)
+  if ($Quiet) { $delegateArgs += "-Quiet" }
+  if ($Force) { $delegateArgs += "-Force" }
+  & $wrapper @delegateArgs
+  exit $LASTEXITCODE
+}
+
 # ---------- prereqs ----------
 $hasNode = Get-Command "node" -ErrorAction SilentlyContinue
 $hasNpm  = Get-Command "npm"  -ErrorAction SilentlyContinue
 
 if (-not $hasNode -or -not $hasNpm) {
   Write-Host "Node.js / npm is required. Install from https://nodejs.org then re-run." -ForegroundColor Red
-  exit 1
-}
-
-# ---------- wrapper location ----------
-$wrapper = Join-Path $PSScriptRoot "openchamber.ps1"
-if (-not (Test-Path -LiteralPath $wrapper)) {
-  Write-Host "openchamber.ps1 not found next to this script: $wrapper" -ForegroundColor Red
   exit 1
 }
 
