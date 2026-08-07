@@ -1,20 +1,24 @@
 {
   "providers": {
     "impl": "opencode",
-    "ui": "opencode",
+    "ui": "claude",
     "research": "opencode",
     "planning": "codex",
     "audit": "opencode"
   },
   "preferences": [
-    "impl: model=opencode-go/deepseek-v4-flash, features.auto_accept=true, features.fast_mode=true, modeId=build",
-    "ui: model=opencode-go/kimi-k3, thinkingOptionId=auto",
-    "research: model=opencode-go/deepseek-v4-pro, thinkingOptionId=max",
-    "planning: provider=codex, model=gpt-5.6-sol",
-    "audit: model=opencode-go/glm-5.2, thinkingOptionId=auto (cross-family contrast from impl — always a different model family than the primary agent)",
-    "default: model=opencode-go/deepseek-v4-flash, thinkingOptionId=auto, modeId=default",
+    "impl: model=opencode-go/deepseek-v4-flash, thinkingOptionId=max, features.auto_accept=true, features.fast_mode=true, modeId=build",
+    "ui: provider=claude, model=claude-opus-5, thinkingOptionId=high (limited budget - reserve for copywriting, naming, UX copy, visual design, styling only)",
+    "research: model=opencode-go/deepseek-v4-flash, thinkingOptionId=max",
+    "planning: provider=codex, model=gpt-5.6-sol, thinkingOptionId=high (limited budget - reserve for high-value planning only)",
+    "audit: model=opencode-go/minimax-m3, thinkingOptionId=auto (lead reviewer - cross-family contrast from impl). For a second opinion, escalate to provider=codex, model=gpt-5.6-sol, thinkingOptionId=high.",
+    "vision: model=opencode-go/mimo-v2.5 (for image and video input)",
+    "default: model=opencode-go/deepseek-v4-flash, thinkingOptionId=max, modeId=default",
+    "deepseek-v4-flash is the primary workhorse with effectively unlimited usage. Use it for all impl, research, scheduled, and recurring work.",
+    "deepseek-v4-flash is also the orchestrator: it decides, synthesizes outputs, and delegates. When a decision needs frontier-model judgment, the orchestrator itself makes the call to provider=codex, model=gpt-5.6-sol for that one step, then resumes on deepseek-v4-flash.",
+    "Claude and codex budgets are limited. Reserve Claude (claude-opus-5) for human-skill work (ui) and codex (gpt-5.6-sol) for planning. Use them only when the task specifically requires their reasoning strength.",
+    "For audits and reviews, lead with minimax-m3. Bring in codex gpt-5.6-sol only as a second opinion when the first review is contested, high-stakes, or needs a different family's judgment.",
     "For committees and second opinions, deliberately use a different model family than the primary agent to get genuine cross-model contrast.",
-    "Scheduled/recurring agents should use the impl provider and model unless the task specifically requires research or audit reasoning.",
     "Prefer asynchronous workflows. Set notifyOnFinish=true for all agent-scoped creates. Do not poll for completion.",
     "Use workspace isolation (worktree mode) when running multiple agents in parallel on the same repo to prevent filesystem conflicts."
   ]
