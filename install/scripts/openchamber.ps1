@@ -253,7 +253,10 @@ function Invoke-Install {
 
   npm config set allow-scripts=better-sqlite3,node-pty --location=user 2>$null
 
-  $out = npm install -g @openchamber/web@latest 2>&1
+  $out = & {
+    $ErrorActionPreference = "Continue"
+    npm install -g @openchamber/web@latest 2>&1
+  }
   $exitCode = $LASTEXITCODE
   $outString = $out | Out-String
   if ($exitCode -ne 0) {

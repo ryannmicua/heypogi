@@ -562,7 +562,7 @@ function Invoke-Ensure {
         if ($choice -eq "N") { return }
       }
       $fixed = $raw -replace '"host"\s*:\s*"[^"]*"', '"host": "0.0.0.0"'
-      Set-Content -LiteralPath $settingsPath -Value $fixed -Encoding UTF8 -NoNewline
+      [System.IO.File]::WriteAllText($settingsPath, $fixed, (New-Object System.Text.UTF8Encoding $false))
       Write-Host "Set openchamber host to 0.0.0.0. Re-running configure..." -ForegroundColor Yellow
       Safe-Invoke -What "Re-running OpenChamber configure" -Body { & (Join-Path $PSScriptRoot "openchamber.ps1") configure }
     }
@@ -621,9 +621,23 @@ function Invoke-Ensure {
       }
       $raw = $raw -replace '"webUi"\s*:\s*\{\s*"enabled"\s*:\s*false', '"webUi": { "enabled": true'
       $changed = $true
+    } elseif ($raw -notmatch '"webUi"\s*:') {
+      # webUi block absent entirely (not just disabled) - insert it under "features"
+      if (-not $Force) {
+        $choice = Read-Choice -Prompt "Paseo webUi is not configured. Enable it? [Y]es, [N]o?" -ValidChoices @("Y", "N")
+        if ($choice -eq "N") { return }
+      }
+      if ($raw -match '"features"\s*:\s*\{') {
+        $insertion = "`$1`n    ""webUi"": { ""enabled"": true },"
+        $raw = $raw -replace '("features"\s*:\s*\{)', $insertion
+      } else {
+        $trailer = ",`n  ""features"": { ""webUi"": { ""enabled"": true } }`n}"
+        $raw = $raw -replace '\}\s*$', $trailer
+      }
+      $changed = $true
     }
     if ($changed) {
-      Set-Content -LiteralPath $paseoCfg -Value $raw -Encoding UTF8 -NoNewline
+      [System.IO.File]::WriteAllText($paseoCfg, $raw, (New-Object System.Text.UTF8Encoding $false))
       Write-Host "Updated paseo config.json. Restarting daemon..." -ForegroundColor Yellow
       Safe-Invoke -What "Restarting Paseo daemon" -Body { Invoke-PaseoDaemon restart }
     }
@@ -678,7 +692,11 @@ function Invoke-Install {
   $toUpdate = @()
   $ocVer = Get-Version -Name "opencode"
   $ocShimVer = Get-Version -Name "openchamber"
-  $paseoVer = Get-Version -Name "paseo"
+  # "paseo" on PATH may resolve to the desktop app's bundled CLI wrapper
+  # rather than the npm-installed one (e.g. ~/.local/bin/paseo.cmd) - if so,
+  # treat it as not installed so the npm package actually gets installed.
+  $paseoSource = Get-CommandSource "paseo"
+  $paseoVer = if (Test-NpmInstalledCli $paseoSource) { Get-Version -Name "paseo" } else { $null }
 
   if (-not $ocVer -or (Test-VersionOutdated -Installed $ocVer -Latest $latest.opencode)) {
     $toUpdate += "opencode"; Write-Host "OpenCode: $(if ($ocVer) { "$ocVer -> $($latest.opencode)" } else { "NOT INSTALLED -> installing $($latest.opencode)" })" -ForegroundColor Yellow
@@ -714,7 +732,13 @@ function Invoke-Install {
       Write-Host "=== Updating $tool ===" -ForegroundColor Cyan
       $scriptPath = Join-Path $PSScriptRoot $scripts[$tool]
       if (Test-Path -LiteralPath $scriptPath) {
-        & $scriptPath
+        # sub-installers only support -Quiet (not -Force); -Force implies
+        # non-interactive intent here too, so pass -Quiet for either.
+        if ($Quiet -or $Force) {
+          & $scriptPath -Quiet
+        } else {
+          & $scriptPath
+        }
       } else {
         Write-Host "Installer not found: $scriptPath - update $tool manually." -ForegroundColor Red
       }
