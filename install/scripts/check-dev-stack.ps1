@@ -1,8 +1,11 @@
 [CmdletBinding()]
 param(
   [Parameter(Position = 0)]
-  [ValidateSet("status", "install", "update", "fix", "start", "stop", "help")]
+  [ValidateSet("status", "install", "update", "fix", "start", "stop", "startup", "help")]
   [string]$Command = "status",
+  [Parameter(Position = 1)]
+  [string]$SubCommand,
+  [string]$App,
   [switch]$Quiet,
   [switch]$Force
 )
@@ -234,6 +237,48 @@ function Test-Health {
 function Get-RunKeyValue {
   param([string]$Name)
   return (Get-ItemProperty $RunKeyPath -Name $Name -ErrorAction SilentlyContinue).$Name
+}
+
+# Normalize a -App value into the internal app id list. "all" (or omitted,
+# via $Default) expands to every app; "paseo-cli" is accepted as an alias
+# for "paseo" since that's the actual npm package being managed.
+function Resolve-AppList {
+  param([string]$App, [string[]]$Default = @("opencode", "openchamber", "paseo"))
+  if ([string]::IsNullOrWhiteSpace($App) -or $App.ToLowerInvariant() -eq "all") {
+    return $Default
+  }
+  switch ($App.ToLowerInvariant()) {
+    "opencode"    { return @("opencode") }
+    "openchamber" { return @("openchamber") }
+    "paseo"       { return @("paseo") }
+    "paseo-cli"   { return @("paseo") }
+    default {
+      Write-Host "Unknown app '$App'. Valid: opencode, openchamber, paseo (alias: paseo-cli), all" -ForegroundColor Red
+      exit 1
+    }
+  }
+}
+
+# Register the PaseoDaemon scheduled task (requires elevation - RunLevel
+# Highest). Shared by Invoke-Ensure and the `startup install`/`enable` paths.
+function Install-PaseoScheduledTask {
+  $nodePath = (Get-Command node -ErrorAction SilentlyContinue).Source
+  $paseoBin = Join-Path $env:APPDATA "npm\node_modules\@getpaseo\cli\bin\paseo"
+  if (-not $nodePath) {
+    Write-Host "node not found on PATH - cannot register task." -ForegroundColor Red
+    return $false
+  }
+  if (-not (Test-Path -LiteralPath $paseoBin)) {
+    Write-Host "paseo bin not found at $paseoBin - cannot register task. Run 'install' first." -ForegroundColor Red
+    return $false
+  }
+  $action = New-ScheduledTaskAction -Execute $nodePath -Argument "--disable-warning=DEP0040 `"$paseoBin`" daemon start"
+  $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+  $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+  return (Safe-Invoke -What "Registering PaseoDaemon scheduled task" -Body {
+    Register-ScheduledTask -TaskName $PaseoTaskName -Action $action -Trigger $trigger -Settings $settings -RunLevel Highest -Force | Out-Null
+    Write-Host "Registered $PaseoTaskName." -ForegroundColor Green
+  })
 }
 
 function Get-FirewallAllow {
@@ -587,19 +632,7 @@ function Invoke-Ensure {
   $task = Get-ScheduledTask -TaskName $PaseoTaskName -ErrorAction SilentlyContinue
   if (-not $task) {
     Write-Host "Registering PaseoDaemon scheduled task..." -ForegroundColor Yellow
-    $nodePath = (Get-Command node).Source
-    $paseoBin = Join-Path $env:APPDATA "npm\node_modules\@getpaseo\cli\bin\paseo"
-    if (Test-Path -LiteralPath $paseoBin) {
-      $action = New-ScheduledTaskAction -Execute $nodePath -Argument "--disable-warning=DEP0040 `"$paseoBin`" daemon start"
-      $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
-      $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-      Safe-Invoke -What "Registering PaseoDaemon scheduled task" -Body {
-        Register-ScheduledTask -TaskName $PaseoTaskName -Action $action -Trigger $trigger -Settings $settings -RunLevel Highest -Force | Out-Null
-        Write-Host "Registered $PaseoTaskName." -ForegroundColor Green
-      }
-    } else {
-      Write-Host "paseo bin not found at $paseoBin - cannot register task. Run 'install' first." -ForegroundColor Red
-    }
+    Install-PaseoScheduledTask | Out-Null
   }
   # paseo config listen -> 0.0.0.0 (targeted edit, prompted unless -Force)
   $paseoCfg = Join-Path $env:USERPROFILE ".paseo\config.json"
@@ -788,6 +821,140 @@ function Invoke-Fix {
   Write-StatusReport
 }
 
+# ---------- startup (per-app autostart management) ----------
+# OpenCode has no autostart mechanism of its own - it's launched as an
+# OpenChamber sidecar, not a standalone daemon. All four verbs are no-ops
+# that just explain this, so `--app all` doesn't error on it.
+function Invoke-OpenCodeStartup {
+  param([string]$Verb)
+  Write-Host "OpenCode: no autostart mechanism to $Verb - it runs as an OpenChamber sidecar, not a standalone daemon." -ForegroundColor Yellow
+}
+
+function Set-OpenChamberAutoStartSetting {
+  param([bool]$Enabled)
+  $settingsPath = Join-Path $env:USERPROFILE ".config\openchamber\settings.json"
+  if (-not (Test-Path -LiteralPath $settingsPath)) {
+    Write-Host "OpenChamber settings not found ($settingsPath). Run 'check-dev-stack.ps1 install' first." -ForegroundColor Red
+    return $false
+  }
+  $raw = Get-Content -LiteralPath $settingsPath -Raw
+  $newVal = if ($Enabled) { "true" } else { "false" }
+  if ($raw -match '"autoStart"\s*:\s*(true|false)') {
+    $raw = $raw -replace '"autoStart"\s*:\s*(true|false)', "`"autoStart`": $newVal"
+  } else {
+    $insertion = "`$1`n  ""autoStart"": $newVal,"
+    $raw = $raw -replace '^(\s*\{)', $insertion
+  }
+  [System.IO.File]::WriteAllText($settingsPath, $raw, (New-Object System.Text.UTF8Encoding $false))
+  Safe-Invoke -What "Re-running OpenChamber configure" -Body { & (Join-Path $PSScriptRoot "openchamber.ps1") configure -Quiet:$Quiet } | Out-Null
+  return $true
+}
+
+function Invoke-OpenChamberStartup {
+  param([string]$Verb)
+  switch ($Verb) {
+    "install" {
+      Write-Host "OpenChamber: installing autostart (Run key + startup wrappers)..." -ForegroundColor Cyan
+      Set-OpenChamberAutoStartSetting -Enabled $true | Out-Null
+    }
+    "enable" {
+      Write-Host "OpenChamber: enabling autostart..." -ForegroundColor Cyan
+      Set-OpenChamberAutoStartSetting -Enabled $true | Out-Null
+    }
+    "disable" {
+      Write-Host "OpenChamber: disabling autostart (Run key removed, wrappers kept for manual start)..." -ForegroundColor Cyan
+      Set-OpenChamberAutoStartSetting -Enabled $false | Out-Null
+    }
+    "uninstall" {
+      Write-Host "OpenChamber: uninstalling autostart (Run key + wrapper files removed)..." -ForegroundColor Cyan
+      Set-OpenChamberAutoStartSetting -Enabled $false | Out-Null
+      $wrapperDir = Join-Path $env:USERPROFILE ".config\openchamber"
+      foreach ($file in @("startup.ps1", "launch.vbs")) {
+        $path = Join-Path $wrapperDir $file
+        if (Test-Path -LiteralPath $path) {
+          Remove-Item -LiteralPath $path -Force
+          Write-Host "Removed $path" -ForegroundColor Cyan
+        }
+      }
+    }
+  }
+}
+
+function Invoke-PaseoStartup {
+  param([string]$Verb)
+  $task = Get-ScheduledTask -TaskName $PaseoTaskName -ErrorAction SilentlyContinue
+  switch ($Verb) {
+    "install" {
+      Write-Host "Paseo: registering $PaseoTaskName scheduled task..." -ForegroundColor Cyan
+      Install-PaseoScheduledTask | Out-Null
+    }
+    "enable" {
+      if (-not $task) {
+        Write-Host "Paseo: $PaseoTaskName not registered yet - registering it..." -ForegroundColor Cyan
+        Install-PaseoScheduledTask | Out-Null
+      } elseif ($task.State -eq "Disabled") {
+        Safe-Invoke -What "Enabling $PaseoTaskName" -Body {
+          Enable-ScheduledTask -TaskName $PaseoTaskName | Out-Null
+          Write-Host "Enabled $PaseoTaskName." -ForegroundColor Green
+        } | Out-Null
+      } else {
+        Write-Host "Paseo: $PaseoTaskName already enabled." -ForegroundColor Green
+      }
+    }
+    "disable" {
+      if (-not $task) {
+        Write-Host "Paseo: $PaseoTaskName is not registered - nothing to disable." -ForegroundColor Yellow
+      } else {
+        Safe-Invoke -What "Disabling $PaseoTaskName" -Body {
+          Disable-ScheduledTask -TaskName $PaseoTaskName | Out-Null
+          Write-Host "Disabled $PaseoTaskName." -ForegroundColor Green
+        } | Out-Null
+      }
+    }
+    "uninstall" {
+      if (-not $task) {
+        Write-Host "Paseo: $PaseoTaskName is not registered - nothing to uninstall." -ForegroundColor Yellow
+      } else {
+        Safe-Invoke -What "Unregistering $PaseoTaskName" -Body {
+          Unregister-ScheduledTask -TaskName $PaseoTaskName -Confirm:$false
+          Write-Host "Unregistered $PaseoTaskName." -ForegroundColor Green
+        } | Out-Null
+      }
+    }
+  }
+}
+
+function Invoke-Startup {
+  param([string]$SubCommand, [string]$App)
+
+  $validVerbs = @("enable", "disable", "install", "uninstall")
+  $verb = if ($SubCommand) { $SubCommand.ToLowerInvariant() } else { "" }
+  if ($validVerbs -notcontains $verb) {
+    Write-Host "Usage: check-dev-stack.ps1 startup <enable|disable|install|uninstall> [-App <opencode|openchamber|paseo|all>]" -ForegroundColor Red
+    exit 1
+  }
+
+  # install/uninstall require an explicit -App; enable/disable default to all.
+  if (($verb -eq "install" -or $verb -eq "uninstall") -and [string]::IsNullOrWhiteSpace($App)) {
+    Write-Host "startup $verb requires -App <opencode|openchamber|paseo|all> (no default)." -ForegroundColor Red
+    exit 1
+  }
+
+  $apps = Resolve-AppList -App $App
+  foreach ($appId in $apps) {
+    switch ($appId) {
+      "opencode"    { Invoke-OpenCodeStartup -Verb $verb }
+      "openchamber" { Invoke-OpenChamberStartup -Verb $verb }
+      "paseo"       { Invoke-PaseoStartup -Verb $verb }
+    }
+  }
+
+  Write-Host ""
+  Write-Host "Verifying..." -ForegroundColor Cyan
+  Collect-Status
+  Write-StatusReport
+}
+
 # ---------- start / stop ----------
 function Invoke-Start {
   if (-not (Get-ListeningPid -Port $OpenChamberPort)) {
@@ -826,10 +993,20 @@ function Show-Help {
   Write-Host "  fix      Auto-fix runtime issues (start services, register autostart, fix config)."
   Write-Host "  start    Start OpenChamber and the Paseo daemon (if not running)."
   Write-Host "  stop     Stop OpenChamber and the Paseo daemon."
+  Write-Host "  startup  Manage autostart-at-login registration. See below."
   Write-Host "  help     Show this help."
+  Write-Host ""
+  Write-Host "startup subcommands:" -ForegroundColor Cyan
+  Write-Host "  enable    <-App app>   Turn autostart on (registers it if missing). Defaults to -App all."
+  Write-Host "  disable   <-App app>   Turn autostart off, keeping the underlying install. Defaults to -App all."
+  Write-Host "  install   -App app     Register the autostart mechanism from scratch. -App is required."
+  Write-Host "  uninstall -App app     Remove the autostart mechanism entirely. -App is required."
+  Write-Host "  apps: opencode, openchamber, paseo (alias: paseo-cli), all"
+  Write-Host "  (--app also works, e.g. --app opencode)"
   Write-Host ""
   Write-Host "Options:" -ForegroundColor Cyan
   Write-Host "  -Command <cmd>  Command to run (same as the positional argument)."
+  Write-Host "  -App <app>      App to target for 'startup' subcommands."
   Write-Host "  -Quiet          Skip the npm latest-version lookups in 'status'."
   Write-Host "  -Force          Apply config fixes without prompting."
   Write-Host ""
@@ -838,6 +1015,10 @@ function Show-Help {
   Write-Host "  .\$exe fix              # fix whatever is broken"
   Write-Host "  .\$exe install -Force   # install/update everything, no prompts"
   Write-Host "  .\$exe status -Quiet    # offline-friendly status check"
+  Write-Host "  .\$exe startup enable --app opencode"
+  Write-Host "  .\$exe startup install --app all"
+  Write-Host "  .\$exe startup uninstall --app paseo-cli"
+  Write-Host "  .\$exe startup disable   # disables autostart for all apps"
 }
 
 # ---------- dispatch ----------
@@ -853,5 +1034,6 @@ switch ($Command) {
   "fix"     { Invoke-Fix }
   "start"   { Invoke-Start }
   "stop"    { Invoke-Stop }
+  "startup" { Invoke-Startup -SubCommand $SubCommand -App $App }
   "help"    { Show-Help }
 }
