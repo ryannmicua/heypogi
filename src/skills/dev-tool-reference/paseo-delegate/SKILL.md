@@ -23,7 +23,7 @@ This is the **reverse of `paseo-escalate`**: escalate sends judgment *up* to a f
 
 - **Plan is written, implementation is not** — a plan, spec, or decision artifact exists and the remaining work is mechanical: implement it, verify it, done.
 - **Well-bounded implementation** — the task has explicit acceptance criteria, in-scope files, and a defined verify step, with no judgment left to make.
-- **Frontier session, execution volume** — you're operating on a frontier model (codex gpt-5.6-sol, claude fable/opus) and want to keep cheap execution off your expensive session.
+- **Frontier session, execution volume** — you're operating on a frontier model (opencode/openai/gpt-5.6-sol, claude fable/opus) and want to keep cheap execution off your expensive session.
 - **Parallelizable chunks** — independent bounded tasks that can run concurrently without conflicting.
 
 Do NOT use when the task still requires reasoning — if writing the brief would force the executor to make a design decision, the thinking is not done. Resolve it first, then delegate.
@@ -39,6 +39,8 @@ Read the **paseo** skill. This skill hardcodes the provider and model, so it doe
 - Fast mode + auto-accept: `settings: { features: { "fast_mode": true, "auto_accept": true } }`
 - Mode: `build`
 - Title: `[Delegate] <topic>`
+
+**Provider routing convention:** This workhorse is a DeepSeek model, so it stays on `opencode-go`. For any *OpenAI* model, prefer routing via the `opencode` provider as `opencode/openai/<model>` (e.g. `opencode/openai/gpt-5.6-sol`).
 
 ## The delegation brief
 

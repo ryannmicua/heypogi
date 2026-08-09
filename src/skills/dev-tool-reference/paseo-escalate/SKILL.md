@@ -2,7 +2,8 @@
 name: paseo-escalate
 description: >-
   Escalate a judgment call from the deepseek-v4-flash orchestrator to a frontier
-  model (codex gpt-5.6-sol at max reasoning) via the Paseo advisor. Use when
+  OpenAI model (opencode/openai/gpt-5.6-sol at max reasoning) via the Paseo
+  advisor. Use when
   deepseek-v4-flash needs higher reasoning to think for it — high-stakes
   synthesis, planning, or contested tradeoffs. Not for routine questions or work
   deepseek-v4-flash can handle.
@@ -12,7 +13,7 @@ argument-hint: "[question, tradeoff, or synthesis to escalate]"
 
 # Escalate to Frontier Advisor
 
-One Paseo advisor agent on **codex gpt-5.6-sol at max reasoning**, fresh context, read-only. Used when the deepseek-v4-flash orchestrator needs a higher-reasoning model to think for it — high-stakes synthesis, planning, or contested tradeoffs. The advisor decides nothing and edits nothing; the orchestrator makes the call.
+One Paseo advisor agent on **opencode/openai/gpt-5.6-sol at max reasoning**, fresh context, read-only. Used when the deepseek-v4-flash orchestrator needs a higher-reasoning model to think for it — high-stakes synthesis, planning, or contested tradeoffs. The advisor decides nothing and edits nothing; the orchestrator makes the call.
 
 **User's request:** $ARGUMENTS
 
@@ -22,7 +23,7 @@ One Paseo advisor agent on **codex gpt-5.6-sol at max reasoning**, fresh context
 - **Planning** — plan sequencing, scope boundaries, or approach selection where a wrong call is expensive.
 - **Contested tradeoffs** — architecture, direction, or cost/quality calls where you want frontier-model reasoning before committing.
 
-Do NOT use for routine questions, mechanical work, or anything deepseek-v4-flash handles fine — this spends limited codex budget.
+Do NOT use for routine questions, mechanical work, or anything deepseek-v4-flash handles fine — this spends limited frontier-OpenAI budget.
 
 ## Prerequisites
 
@@ -30,7 +31,7 @@ Read the **paseo** skill. This skill hardcodes the provider and model, so it doe
 
 ## Fixed configuration
 
-- Provider: `codex/gpt-5.6-sol`
+- Provider: `opencode/openai/gpt-5.6-sol` (prefer routing OpenAI models via the `opencode` provider as `opencode/openai/<model>`)
 - Thinking: `max` (`settings.thinkingOptionId = "max"`)
 - Title: `[Escalate] <topic>`
 
