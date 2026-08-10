@@ -1,7 +1,26 @@
 [CmdletBinding()]
-param()
+param(
+  [Alias("h")]
+  [switch]$Help
+)
 
 $ErrorActionPreference = "Stop"
+
+if ($Help) {
+  Write-Host "write-profile.ps1 - write HEYPOGI_ROOT / OPENCODE_CONFIG_DIR into PowerShell profiles" -ForegroundColor Green
+  Write-Host ""
+  Write-Host "Usage: write-profile.ps1"
+  Write-Host ""
+  Write-Host "Reads HEYPOGI_ROOT / OPENCODE_CONFIG_DIR from the user registry (set by"
+  Write-Host "setup-environment.ps1) and writes/updates a marked block in every"
+  Write-Host "PowerShell profile.ps1 found (PowerShell 7, Windows PowerShell, and"
+  Write-Host "their OneDrive-redirected Documents variants). Fails if HEYPOGI_ROOT"
+  Write-Host "isn't set yet - run setup-environment.ps1 first."
+  Write-Host ""
+  Write-Host "Flags:"
+  Write-Host "  -Help, -h  Show this message."
+  exit 0
+}
 
 function Get-ProfilePaths {
   $docs = [Environment]::GetFolderPath("MyDocuments")

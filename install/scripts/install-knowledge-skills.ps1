@@ -1,9 +1,26 @@
 [CmdletBinding()]
 param(
-  [switch]$CreateDest
+  [switch]$CreateDest,
+  [Alias("h")]
+  [switch]$Help
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($Help) {
+  Write-Host "install-knowledge-skills.ps1 - link the Compound Knowledge plugin's skills" -ForegroundColor Green
+  Write-Host ""
+  Write-Host "Usage: install-knowledge-skills.ps1 [-CreateDest]"
+  Write-Host ""
+  Write-Host "Junction-links external/compound-knowledge/plugins/compound-knowledge/skills"
+  Write-Host "into ~/.agents/skills/compound-knowledge. If that link already exists,"
+  Write-Host "asks to overwrite, skip, or quit."
+  Write-Host ""
+  Write-Host "Flags:"
+  Write-Host "  -CreateDest  Create ~/.agents/skills if it doesn't exist yet."
+  Write-Host "  -Help, -h    Show this message."
+  exit 0
+}
 
 function Read-Choice {
   param(

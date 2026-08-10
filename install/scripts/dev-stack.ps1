@@ -1,14 +1,18 @@
 [CmdletBinding()]
 param(
   [Parameter(Position = 0)]
-  [ValidateSet("status", "install", "update", "fix", "start", "stop", "startup", "help")]
   [string]$Command = "status",
   [Parameter(Position = 1)]
   [string]$SubCommand,
   [string]$App,
   [switch]$Quiet,
-  [switch]$Force
+  [switch]$Force,
+  [switch]$WipeConfig,
+  [Alias("h")]
+  [switch]$Help
 )
+
+$ValidCommands = @("status", "install", "update", "fix", "start", "stop", "startup", "uninstall", "help")
 
 $ErrorActionPreference = "Stop"
 
@@ -38,7 +42,7 @@ function Read-Choice {
   }
 }
 
-# Run a delegated action (openchamber.ps1 / paseo) without crashing the
+# Run a delegated action (openchamber-ctl.ps1 / paseo) without crashing the
 # supervisor when the tool is missing on a fresh machine.
 function Safe-Invoke {
   param([string]$What, [scriptblock]$Body)
@@ -254,6 +258,8 @@ function Resolve-AppList {
     "paseo-cli"   { return @("paseo") }
     default {
       Write-Host "Unknown app '$App'. Valid: opencode, openchamber, paseo (alias: paseo-cli), all" -ForegroundColor Red
+      Write-Host ""
+      Show-Help
       exit 1
     }
   }
@@ -369,7 +375,7 @@ function Write-StatusReport {
   if ($issues.Count -eq 0) {
     Write-Host "All checks passed." -ForegroundColor Green
   } else {
-    Write-Host "$($issues.Count) issue(s) found. Run: $PSScriptRoot\check-dev-stack.ps1 fix" -ForegroundColor Yellow
+    Write-Host "$($issues.Count) issue(s) found. Run: $PSScriptRoot\dev-stack.ps1 fix" -ForegroundColor Yellow
   }
 }
 
@@ -459,7 +465,7 @@ function Collect-Status {
   }
 
   # openchamber autostart: Run key + settings autoStart + wrapper files
-  # autoStart defaults to $true when the key is absent (mirrors openchamber.ps1 Read-Settings)
+  # autoStart defaults to $true when the key is absent (mirrors openchamber-ctl.ps1 Read-Settings)
   $runValue = Get-RunKeyValue -Name $OpenChamberRunKey
   $settingsPath = Join-Path $env:USERPROFILE ".config\openchamber\settings.json"
   $autoStart = $true
@@ -610,15 +616,19 @@ function Get-IssueCount {
 
 # ---------- ensure (idempotent: running + autostart + config) ----------
 function Invoke-Ensure {
+  param([string]$App)
+  $apps = Resolve-AppList -App $App
+
+  if ($apps -contains "openchamber") {
   # openchamber: not running -> start
   if (-not (Get-ListeningPid -Port $OpenChamberPort)) {
     Write-Host "Starting OpenChamber..." -ForegroundColor Yellow
-    Safe-Invoke -What "Starting OpenChamber" -Body { & (Join-Path $PSScriptRoot "openchamber.ps1") start }
+    Safe-Invoke -What "Starting OpenChamber" -Body { & (Join-Path $PSScriptRoot "openchamber-ctl.ps1") start }
   }
   # openchamber autostart -> configure re-registers Run key + wrappers
   if (-not (Get-RunKeyValue -Name $OpenChamberRunKey)) {
     Write-Host "Registering OpenChamber autostart..." -ForegroundColor Yellow
-    Safe-Invoke -What "Registering OpenChamber autostart" -Body { & (Join-Path $PSScriptRoot "openchamber.ps1") configure }
+    Safe-Invoke -What "Registering OpenChamber autostart" -Body { & (Join-Path $PSScriptRoot "openchamber-ctl.ps1") configure }
   }
   # openchamber settings host -> 0.0.0.0 (targeted edit, prompted unless -Force)
   $settingsPath = Join-Path $env:USERPROFILE ".config\openchamber\settings.json"
@@ -632,7 +642,7 @@ function Invoke-Ensure {
       $fixed = $raw -replace '"host"\s*:\s*"[^"]*"', '"host": "0.0.0.0"'
       [System.IO.File]::WriteAllText($settingsPath, $fixed, (New-Object System.Text.UTF8Encoding $false))
       Write-Host "Set openchamber host to 0.0.0.0. Re-running configure..." -ForegroundColor Yellow
-      Safe-Invoke -What "Re-running OpenChamber configure" -Body { & (Join-Path $PSScriptRoot "openchamber.ps1") configure }
+      Safe-Invoke -What "Re-running OpenChamber configure" -Body { & (Join-Path $PSScriptRoot "openchamber-ctl.ps1") configure }
     }
   }
   # openchamber UI password reminder
@@ -645,7 +655,9 @@ function Invoke-Ensure {
     Write-Host "OpenChamber has no UI password yet - set one manually (UI is exposed without auth on 0.0.0.0):" -ForegroundColor Yellow
     Write-Host "  [Environment]::SetEnvironmentVariable('OPENCHAMBER_UI_PASSWORD', 'yourpassword', 'User')" -ForegroundColor Cyan
   }
+  } # end: openchamber ensure
 
+  if ($apps -contains "paseo") {
   # paseo: daemon not running -> start
   if (-not (Get-ListeningPid -Port $PaseoPort)) {
     Write-Host "Starting Paseo daemon..." -ForegroundColor Yellow
@@ -729,10 +741,14 @@ function Invoke-Ensure {
       }
     }
   }
+  } # end: paseo ensure
 }
 
 # ---------- install (explicit: install latest + configure everything) ----------
 function Invoke-Install {
+  param([string]$App)
+  $apps = Resolve-AppList -App $App
+
   $paseoLatest = Get-LatestVersion -Package $PkgPaseo
   $paseoBeta   = Get-DistTagVersion -Package $PkgPaseo -Tag "beta"
   $latest = @{
@@ -754,21 +770,27 @@ function Invoke-Install {
   $paseoSource = Get-CommandSource "paseo"
   $paseoVer = if (Test-NpmInstalledCli $paseoSource) { Get-Version -Name "paseo" } else { $null }
 
-  if (-not $ocVer -or (Test-VersionOutdated -Installed $ocVer -Latest $latest.opencode)) {
-    $toUpdate += "opencode"; Write-Host "OpenCode: $(if ($ocVer) { "$ocVer -> $($latest.opencode)" } else { "NOT INSTALLED -> installing $($latest.opencode)" })" -ForegroundColor Yellow
-  } else {
-    Write-Host "OpenCode: up to date ($ocVer)" -ForegroundColor Green
+  if ($apps -contains "opencode") {
+    if (-not $ocVer -or (Test-VersionOutdated -Installed $ocVer -Latest $latest.opencode)) {
+      $toUpdate += "opencode"; Write-Host "OpenCode: $(if ($ocVer) { "$ocVer -> $($latest.opencode)" } else { "NOT INSTALLED -> installing $($latest.opencode)" })" -ForegroundColor Yellow
+    } else {
+      Write-Host "OpenCode: up to date ($ocVer)" -ForegroundColor Green
+    }
   }
-  if (-not $ocShimVer -or (Test-VersionOutdated -Installed $ocShimVer -Latest $latest.openchamber)) {
-    $toUpdate += "openchamber"; Write-Host "OpenChamber: $(if ($ocShimVer) { "$ocShimVer -> $($latest.openchamber)" } else { "NOT INSTALLED -> installing $($latest.openchamber)" })" -ForegroundColor Yellow
-  } else {
-    Write-Host "OpenChamber: up to date ($ocShimVer)" -ForegroundColor Green
+  if ($apps -contains "openchamber") {
+    if (-not $ocShimVer -or (Test-VersionOutdated -Installed $ocShimVer -Latest $latest.openchamber)) {
+      $toUpdate += "openchamber"; Write-Host "OpenChamber: $(if ($ocShimVer) { "$ocShimVer -> $($latest.openchamber)" } else { "NOT INSTALLED -> installing $($latest.openchamber)" })" -ForegroundColor Yellow
+    } else {
+      Write-Host "OpenChamber: up to date ($ocShimVer)" -ForegroundColor Green
+    }
   }
-  if (-not $paseoVer -or (Test-VersionOutdated -Installed $paseoVer -Latest $latest.paseo)) {
-    $paseoTag = if ($latest.paseo -eq $paseoBeta) { "beta" } else { "latest" }
-    $toUpdate += "paseo"; Write-Host "Paseo: $(if ($paseoVer) { "$paseoVer -> $($latest.paseo) ($paseoTag)" } else { "NOT INSTALLED -> installing $($latest.paseo) ($paseoTag)" })" -ForegroundColor Yellow
-  } else {
-    Write-Host "Paseo: up to date ($paseoVer)" -ForegroundColor Green
+  if ($apps -contains "paseo") {
+    if (-not $paseoVer -or (Test-VersionOutdated -Installed $paseoVer -Latest $latest.paseo)) {
+      $paseoTag = if ($latest.paseo -eq $paseoBeta) { "beta" } else { "latest" }
+      $toUpdate += "paseo"; Write-Host "Paseo: $(if ($paseoVer) { "$paseoVer -> $($latest.paseo) ($paseoTag)" } else { "NOT INSTALLED -> installing $($latest.paseo) ($paseoTag)" })" -ForegroundColor Yellow
+    } else {
+      Write-Host "Paseo: up to date ($paseoVer)" -ForegroundColor Green
+    }
   }
 
   if ($toUpdate.Count -gt 0) {
@@ -779,24 +801,19 @@ function Invoke-Install {
     }
 
     $scripts = @{
-      opencode    = "install-opencode-cli.ps1"
-      openchamber = "install-openchamber.ps1"
-      paseo       = "install-paseo-cli.ps1"
+      opencode    = "opencode-ctl.ps1"
+      openchamber = "openchamber-ctl.ps1"
+      paseo       = "paseo-ctl.ps1"
     }
     foreach ($tool in $toUpdate) {
       Write-Host ""
       Write-Host "=== Updating $tool ===" -ForegroundColor Cyan
       $scriptPath = Join-Path $PSScriptRoot $scripts[$tool]
       if (Test-Path -LiteralPath $scriptPath) {
-        # sub-installers only support -Quiet (not -Force); -Force implies
-        # non-interactive intent here too, so pass -Quiet for either.
-        if ($Quiet -or $Force) {
-          & $scriptPath -Quiet
-        } else {
-          & $scriptPath
-        }
+        # the *-ctl.ps1 scripts default to "status" - pass "install" explicitly.
+        & $scriptPath install -Quiet:$Quiet -Force:$Force
       } else {
-        Write-Host "Installer not found: $scriptPath - update $tool manually." -ForegroundColor Red
+        Write-Host "Control script not found: $scriptPath - update $tool manually." -ForegroundColor Red
       }
     }
 
@@ -804,7 +821,7 @@ function Invoke-Install {
     Write-Host ""
     if ($toUpdate -contains "openchamber") {
       Write-Host "Restarting OpenChamber..." -ForegroundColor Cyan
-      Safe-Invoke -What "Restarting OpenChamber" -Body { & (Join-Path $PSScriptRoot "openchamber.ps1") start }
+      Safe-Invoke -What "Restarting OpenChamber" -Body { & (Join-Path $PSScriptRoot "openchamber-ctl.ps1") start }
     }
     if ($toUpdate -contains "paseo") {
       Write-Host "Restarting Paseo daemon..." -ForegroundColor Cyan
@@ -818,17 +835,20 @@ function Invoke-Install {
   # always: ensure autostarts + config are in place (idempotent)
   Write-Host ""
   Write-Host "Ensuring autostart + config..." -ForegroundColor Cyan
-  Invoke-Ensure
+  Invoke-Ensure -App $App
 
   Write-Host ""
   Write-Host "Install finished. Verifying..." -ForegroundColor Cyan
   Collect-Status
+  Limit-ChecksToApp -App $App
   Write-StatusReport
 }
 
 # ---------- fix ----------
 function Invoke-Fix {
+  param([string]$App)
   Collect-Status
+  Limit-ChecksToApp -App $App
   $issues = @($script:Checks | Where-Object { -not $_.Ok -and $_.Service -ne "OpenCode" })
   if ($issues.Count -eq 0) {
     Write-Host "No runtime issues to fix." -ForegroundColor Green
@@ -836,18 +856,19 @@ function Invoke-Fix {
   }
 
   Write-Host "Fixing runtime state..." -ForegroundColor Cyan
-  Invoke-Ensure
+  Invoke-Ensure -App $App
 
   Write-Host ""
   Write-Host "Fix finished. Verifying..." -ForegroundColor Cyan
   Collect-Status
+  Limit-ChecksToApp -App $App
   Write-StatusReport
 }
 
 # ---------- startup (per-app autostart management) ----------
 # OpenCode has no autostart mechanism of its own - it's launched as an
 # OpenChamber sidecar, not a standalone daemon. All four verbs are no-ops
-# that just explain this, so `--app all` doesn't error on it.
+# that just explain this, so `-App all` doesn't error on it.
 function Invoke-OpenCodeStartup {
   param([string]$Verb)
   Write-Host "OpenCode: no autostart mechanism to $Verb - it runs as an OpenChamber sidecar, not a standalone daemon." -ForegroundColor Yellow
@@ -857,7 +878,7 @@ function Set-OpenChamberAutoStartSetting {
   param([bool]$Enabled)
   $settingsPath = Join-Path $env:USERPROFILE ".config\openchamber\settings.json"
   if (-not (Test-Path -LiteralPath $settingsPath)) {
-    Write-Host "OpenChamber settings not found ($settingsPath). Run 'check-dev-stack.ps1 install' first." -ForegroundColor Red
+    Write-Host "OpenChamber settings not found ($settingsPath). Run 'dev-stack.ps1 install' first." -ForegroundColor Red
     return $false
   }
   $raw = Get-Content -LiteralPath $settingsPath -Raw
@@ -869,7 +890,7 @@ function Set-OpenChamberAutoStartSetting {
     $raw = $raw -replace '^(\s*\{)', $insertion
   }
   [System.IO.File]::WriteAllText($settingsPath, $raw, (New-Object System.Text.UTF8Encoding $false))
-  Safe-Invoke -What "Re-running OpenChamber configure" -Body { & (Join-Path $PSScriptRoot "openchamber.ps1") configure -Quiet:$Quiet } | Out-Null
+  Safe-Invoke -What "Re-running OpenChamber configure" -Body { & (Join-Path $PSScriptRoot "openchamber-ctl.ps1") configure -Quiet:$Quiet } | Out-Null
   return $true
 }
 
@@ -953,13 +974,22 @@ function Invoke-Startup {
   $validVerbs = @("enable", "disable", "install", "uninstall")
   $verb = if ($SubCommand) { $SubCommand.ToLowerInvariant() } else { "" }
   if ($validVerbs -notcontains $verb) {
-    Write-Host "Usage: check-dev-stack.ps1 startup <enable|disable|install|uninstall> [-App <opencode|openchamber|paseo|all>]" -ForegroundColor Red
+    if ([string]::IsNullOrEmpty($SubCommand)) {
+      Write-Host "startup requires a subcommand." -ForegroundColor Red
+    } else {
+      Write-Host "Unknown startup subcommand '$SubCommand'." -ForegroundColor Red
+    }
+    Write-Host "Valid: $($validVerbs -join ', ')" -ForegroundColor Yellow
+    Write-Host ""
+    Show-Help
     exit 1
   }
 
   # install/uninstall require an explicit -App; enable/disable default to all.
   if (($verb -eq "install" -or $verb -eq "uninstall") -and [string]::IsNullOrWhiteSpace($App)) {
     Write-Host "startup $verb requires -App <opencode|openchamber|paseo|all> (no default)." -ForegroundColor Red
+    Write-Host ""
+    Show-Help
     exit 1
   }
 
@@ -978,6 +1008,45 @@ function Invoke-Startup {
   Write-StatusReport
 }
 
+# ---------- uninstall (full lifecycle teardown: package + autostart, not just autostart) ----------
+# Delegates to each tool's own *-ctl.ps1 uninstall, which stops the running
+# instance/daemon, removes autostart, and `npm uninstall -g` the package.
+# Config/settings are kept by default; -WipeConfig also removes them, and
+# each ctl script always confirms that removal unless -Force is given too.
+function Invoke-Uninstall {
+  param([string]$App)
+
+  if ([string]::IsNullOrWhiteSpace($App)) {
+    Write-Host "uninstall requires -App <opencode|openchamber|paseo|all> (no default - this is destructive)." -ForegroundColor Red
+    Write-Host ""
+    Show-Help
+    exit 1
+  }
+
+  $apps = Resolve-AppList -App $App
+  $scripts = @{
+    opencode    = "opencode-ctl.ps1"
+    openchamber = "openchamber-ctl.ps1"
+    paseo       = "paseo-ctl.ps1"
+  }
+  foreach ($appId in $apps) {
+    Write-Host ""
+    Write-Host "=== Uninstalling $appId ===" -ForegroundColor Cyan
+    $scriptPath = Join-Path $PSScriptRoot $scripts[$appId]
+    if (Test-Path -LiteralPath $scriptPath) {
+      & $scriptPath uninstall -Quiet:$Quiet -Force:$Force -WipeConfig:$WipeConfig
+    } else {
+      Write-Host "Control script not found: $scriptPath - uninstall $appId manually." -ForegroundColor Red
+    }
+  }
+
+  Write-Host ""
+  Write-Host "Verifying..." -ForegroundColor Cyan
+  Collect-Status
+  Limit-ChecksToApp -App $App
+  Write-StatusReport
+}
+
 # ---------- start / stop ----------
 function Invoke-Start {
   param([string]$App)
@@ -988,7 +1057,7 @@ function Invoke-Start {
   if ($apps -contains "openchamber") {
     if (-not (Get-ListeningPid -Port $OpenChamberPort)) {
       Write-Host "Starting OpenChamber..." -ForegroundColor Cyan
-      Safe-Invoke -What "Starting OpenChamber" -Body { & (Join-Path $PSScriptRoot "openchamber.ps1") start }
+      Safe-Invoke -What "Starting OpenChamber" -Body { & (Join-Path $PSScriptRoot "openchamber-ctl.ps1") start }
     } else {
       Write-Host "OpenChamber already running." -ForegroundColor Green
     }
@@ -1011,7 +1080,7 @@ function Invoke-Stop {
   }
   if ($apps -contains "openchamber") {
     Write-Host "Stopping OpenChamber..." -ForegroundColor Cyan
-    Safe-Invoke -What "Stopping OpenChamber" -Body { & (Join-Path $PSScriptRoot "openchamber.ps1") stop }
+    Safe-Invoke -What "Stopping OpenChamber" -Body { & (Join-Path $PSScriptRoot "openchamber-ctl.ps1") stop }
   }
   if ($apps -contains "paseo") {
     Write-Host "Stopping Paseo daemon..." -ForegroundColor Cyan
@@ -1021,7 +1090,7 @@ function Invoke-Stop {
 
 # ---------- help ----------
 function Show-Help {
-  $exe = "check-dev-stack.ps1"
+  $exe = "dev-stack.ps1"
   Write-Host "Usage: .\$exe [command] [options]" -ForegroundColor Cyan
   Write-Host ""
   Write-Host "Supervisor for the dev stack (OpenCode, OpenChamber, Paseo):" -ForegroundColor White
@@ -1032,43 +1101,70 @@ function Show-Help {
   Write-Host "  install  Install or update all tools to latest, then configure autostart + config."
   Write-Host "  update   Alias for install."
   Write-Host "  fix      Auto-fix runtime issues (start services, register autostart, fix config)."
-  Write-Host "  start    Start OpenChamber and the Paseo daemon (if not running)."
-  Write-Host "  stop     Stop OpenChamber and the Paseo daemon."
-  Write-Host "  startup  Manage autostart-at-login registration. See below."
-  Write-Host "  help     Show this help."
+  Write-Host "  start     Start OpenChamber and the Paseo daemon (if not running)."
+  Write-Host "  stop      Stop OpenChamber and the Paseo daemon."
+  Write-Host "  startup   Manage autostart-at-login registration only. See below."
+  Write-Host "  uninstall Full teardown: stop, remove autostart, and uninstall the npm package."
+  Write-Host "  help      Show this help."
   Write-Host ""
-  Write-Host "status/start/stop accept -App <opencode|openchamber|paseo|all> to target"
-  Write-Host "just one app instead of all three (defaults to all when omitted)."
+  Write-Host "status/install/update/fix/start/stop all accept -App <opencode|openchamber|paseo|all>"
+  Write-Host "to target just one app instead of all three (defaults to all when omitted)."
+  Write-Host "e.g. 'update -App opencode' only checks/updates OpenCode, not the other two."
   Write-Host ""
-  Write-Host "startup subcommands:" -ForegroundColor Cyan
+  Write-Host "startup subcommands (autostart registration only, package stays installed):" -ForegroundColor Cyan
   Write-Host "  enable    <-App app>   Turn autostart on (registers it if missing). Defaults to -App all."
   Write-Host "  disable   <-App app>   Turn autostart off, keeping the underlying install. Defaults to -App all."
   Write-Host "  install   -App app     Register the autostart mechanism from scratch. -App is required."
   Write-Host "  uninstall -App app     Remove the autostart mechanism entirely. -App is required."
   Write-Host "  apps: opencode, openchamber, paseo (alias: paseo-cli), all"
-  Write-Host "  (--app also works, e.g. --app opencode)"
+  Write-Host ""
+  Write-Host "uninstall (full lifecycle teardown - -App is required, no default):" -ForegroundColor Cyan
+  Write-Host "  Stops the app, removes its autostart registration, and runs"
+  Write-Host "  'npm uninstall -g' for its package. Delegates to opencode-ctl.ps1 /"
+  Write-Host "  openchamber-ctl.ps1 / paseo-ctl.ps1, each of which keeps config/settings"
+  Write-Host "  by default. Add -WipeConfig to also remove them - each ctl script always"
+  Write-Host "  confirms that removal unless -Force is given too."
   Write-Host ""
   Write-Host "Options:" -ForegroundColor Cyan
   Write-Host "  -Command <cmd>  Command to run (same as the positional argument)."
-  Write-Host "  -App <app>      App to target for 'startup' subcommands."
+  Write-Host "  -App <app>      App to target for 'startup'/'uninstall'/status/start/stop."
   Write-Host "  -Quiet          Skip the npm latest-version lookups in 'status'."
-  Write-Host "  -Force          Apply config fixes without prompting."
+  Write-Host "  -Force          Apply config fixes / skip confirmations without prompting."
+  Write-Host "  -WipeConfig     With 'uninstall', also remove the app's config/settings."
+  Write-Host ""
+  Write-Host "Use single-dash flags (-App, -Quiet, ...) - '--app' only works when this"
+  Write-Host "script is launched via 'powershell -File'; running it directly"
+  Write-Host "(.\dev-stack.ps1 ...) does not translate '--' to '-'."
   Write-Host ""
   Write-Host "Examples:" -ForegroundColor Cyan
   Write-Host "  .\$exe                  # quick health check"
   Write-Host "  .\$exe fix              # fix whatever is broken"
   Write-Host "  .\$exe install -Force   # install/update everything, no prompts"
   Write-Host "  .\$exe status -Quiet    # offline-friendly status check"
-  Write-Host "  .\$exe startup enable --app opencode"
-  Write-Host "  .\$exe startup install --app all"
-  Write-Host "  .\$exe startup uninstall --app paseo-cli"
+  Write-Host "  .\$exe update -App opencode -Force   # only update OpenCode"
+  Write-Host "  .\$exe fix -App paseo-cli             # only fix Paseo's runtime state"
+  Write-Host "  .\$exe startup enable -App opencode"
+  Write-Host "  .\$exe startup install -App all"
+  Write-Host "  .\$exe startup uninstall -App paseo-cli"
   Write-Host "  .\$exe startup disable   # disables autostart for all apps"
-  Write-Host "  .\$exe start --app paseo-cli"
-  Write-Host "  .\$exe stop --app openchamber"
-  Write-Host "  .\$exe status --app opencode"
+  Write-Host "  .\$exe start -App paseo-cli"
+  Write-Host "  .\$exe stop -App openchamber"
+  Write-Host "  .\$exe status -App opencode"
+  Write-Host "  .\$exe uninstall -App paseo-cli              # keeps ~/.paseo config"
+  Write-Host "  .\$exe uninstall -App opencode -WipeConfig    # also deletes its config"
 }
 
 # ---------- dispatch ----------
+if ($Help) { $Command = "help" }
+$Command = $Command.ToLowerInvariant()
+if ($ValidCommands -notcontains $Command) {
+  Write-Host "Unknown command '$Command'." -ForegroundColor Red
+  Write-Host "Valid commands: $($ValidCommands -join ', ')" -ForegroundColor Yellow
+  Write-Host ""
+  Show-Help
+  exit 1
+}
+
 switch ($Command) {
   "status" {
     Collect-Status
@@ -1077,11 +1173,12 @@ switch ($Command) {
     $count = Get-IssueCount
     exit $(if ($count -eq 0) { 0 } else { 1 })
   }
-  "install" { Invoke-Install }
-  "update"  { Invoke-Install }
-  "fix"     { Invoke-Fix }
+  "install" { Invoke-Install -App $App }
+  "update"  { Invoke-Install -App $App }
+  "fix"     { Invoke-Fix -App $App }
   "start"   { Invoke-Start -App $App }
   "stop"    { Invoke-Stop -App $App }
-  "startup" { Invoke-Startup -SubCommand $SubCommand -App $App }
+  "startup"   { Invoke-Startup -SubCommand $SubCommand -App $App }
+  "uninstall" { Invoke-Uninstall -App $App }
   "help"    { Show-Help }
 }

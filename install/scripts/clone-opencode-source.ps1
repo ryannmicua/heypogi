@@ -1,9 +1,25 @@
 [CmdletBinding()]
 param(
-  [switch]$Quiet
+  [switch]$Quiet,
+  [Alias("h")]
+  [switch]$Help
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($Help) {
+  Write-Host "clone-opencode-source.ps1 - clone/update the OpenCode source" -ForegroundColor Green
+  Write-Host ""
+  Write-Host "Usage: clone-opencode-source.ps1 [-Quiet]"
+  Write-Host ""
+  Write-Host "Clones external/opencode if missing, or pulls latest if it already"
+  Write-Host "exists (prompts unless -Quiet)."
+  Write-Host ""
+  Write-Host "Flags:"
+  Write-Host "  -Quiet     Pull without prompting."
+  Write-Host "  -Help, -h  Show this message."
+  exit 0
+}
 
 function Read-Choice {
   param([string]$Prompt, [string[]]$ValidChoices)
