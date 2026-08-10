@@ -5,8 +5,7 @@ param(
   [string]$Command = "status",
   [switch]$Quiet,
   [switch]$Force,
-  [switch]$KeepSettings,
-  [switch]$KeepPackage,
+  [switch]$WipeConfig,
   [Alias("h")]
   [switch]$Help
 )
@@ -181,7 +180,7 @@ function Invoke-Configure {
   $node = Get-NodeExe
   $cli = Get-CliJsPath
   if (-not $node) { throw "Node.js not found. Install Node.js first." }
-  if (-not $cli) { throw "OpenChamber CLI not found. Run: $PSScriptRoot\openchamber.ps1 install" }
+  if (-not $cli) { throw "OpenChamber CLI not found. Run: $PSScriptRoot\openchamber-ctl.ps1 install" }
 
   $startupPs1 = Join-Path $wrapperDir "startup.ps1"
   $launchVbs = Join-Path $wrapperDir "launch.vbs"
@@ -195,7 +194,7 @@ if (Test-Path -LiteralPath `$settingsPath) {
   if (`$null -ne `$file.port) { `$settings.port = [int]`$file.port }
   if (`$null -ne `$file.host -and "`$(`$file.host)".Trim() -ne "") { `$settings.host = "`$(`$file.host)".Trim() }
 }
-if (-not (Test-Path -LiteralPath "$cli")) { throw "OpenChamber CLI not found: $cli. Run install/scripts/openchamber.ps1 install" }
+if (-not (Test-Path -LiteralPath "$cli")) { throw "OpenChamber CLI not found: $cli. Run install/scripts/openchamber-ctl.ps1 install" }
 & "$node" "$cli" serve --foreground --port `$settings.port --host `$settings.host
 "@ | Set-Content -LiteralPath $startupPs1 -Encoding UTF8
 
@@ -220,7 +219,7 @@ CreateObject("Wscript.Shell").Run "powershell.exe -NoProfile -ExecutionPolicy By
     Write-Host "  Startup  : $startupPs1"
     Write-Host "  Launcher : $launchVbs"
     Write-Host "  UI       : http://localhost:$($settings.port) (http://$($settings.host):$($settings.port) on LAN)"
-    Write-Host "  Start    : $PSScriptRoot\openchamber.ps1 start"
+    Write-Host "  Start    : $PSScriptRoot\openchamber-ctl.ps1 start"
   }
 }
 
@@ -280,7 +279,7 @@ function Invoke-Install {
     if ($currentVersion -and $currentVersion -ne $newVersion) {
       Write-Host "Updated: $currentVersion -> $newVersion" -ForegroundColor Cyan
     }
-    Write-Host "Start with: $PSScriptRoot\openchamber.ps1 start"
+    Write-Host "Start with: $PSScriptRoot\openchamber-ctl.ps1 start"
   }
 }
 
@@ -294,7 +293,7 @@ function Invoke-Start {
 
   $launchVbs = Join-Path (Get-WrapperDir) "launch.vbs"
   if (-not (Test-Path -LiteralPath $launchVbs)) {
-    throw "Launcher not found: $launchVbs. Run: $PSScriptRoot\openchamber.ps1 configure"
+    throw "Launcher not found: $launchVbs. Run: $PSScriptRoot\openchamber-ctl.ps1 configure"
   }
 
   wscript.exe //NoLogo $launchVbs
@@ -309,7 +308,7 @@ function Invoke-Start {
     $ocState = if ($health.openCodeRunning) { "running" } else { "not running" }
     Write-Host "OpenChamber $($health.openchamberVersion) up on http://$($settings.host):$($settings.port) (OpenCode $ocState)" -ForegroundColor Green
   } else {
-    Write-Host "Launched but health check on port $($settings.port) did not pass yet. Check: $PSScriptRoot\openchamber.ps1 status" -ForegroundColor Yellow
+    Write-Host "Launched but health check on port $($settings.port) did not pass yet. Check: $PSScriptRoot\openchamber-ctl.ps1 status" -ForegroundColor Yellow
   }
 }
 
@@ -318,7 +317,7 @@ function Invoke-Serve {
   $node = Get-NodeExe
   $cli = Get-CliJsPath
   if (-not $node -or -not $cli) {
-    throw "OpenChamber CLI not found. Run: $PSScriptRoot\openchamber.ps1 install"
+    throw "OpenChamber CLI not found. Run: $PSScriptRoot\openchamber-ctl.ps1 install"
   }
   Write-Host "Starting OpenChamber on port $($settings.port) (foreground, Ctrl+C to stop)" -ForegroundColor Cyan
   & $node $cli serve --foreground --port $settings.port --host $settings.host
@@ -332,7 +331,7 @@ function Invoke-Status {
   Write-Host "OpenChamber status" -ForegroundColor Green
   Write-Host "  Package version : $version"
   Write-Host "  CLI entry       : $cli"
-  if (-not $cli) { Write-Host "  CLI entry       : NOT INSTALLED - run openchamber.ps1 install" -ForegroundColor Red }
+  if (-not $cli) { Write-Host "  CLI entry       : NOT INSTALLED - run openchamber-ctl.ps1 install" -ForegroundColor Red }
 
   $listening = Test-Listening -Port $settings.port
   $pidOnPort = Get-ListeningPid -Port $settings.port
@@ -360,9 +359,9 @@ function Invoke-Status {
 }
 
 function Invoke-Help {
-  Write-Host "openchamber.ps1 - manage the OpenChamber install/service" -ForegroundColor Green
+  Write-Host "openchamber-ctl.ps1 - manage the OpenChamber install/service" -ForegroundColor Green
   Write-Host ""
-  Write-Host "Usage: openchamber.ps1 [command] [-Quiet] [-Force] [-KeepSettings] [-KeepPackage]"
+  Write-Host "Usage: openchamber-ctl.ps1 [command] [-Quiet] [-Force] [-WipeConfig]"
   Write-Host ""
   Write-Host "Commands:"
   Write-Host "  install    Install/update the @openchamber/web npm package, then configure."
@@ -376,11 +375,11 @@ function Invoke-Help {
   Write-Host "  help       Show this message."
   Write-Host ""
   Write-Host "Flags:"
-  Write-Host "  -Quiet         Suppress non-essential output."
-  Write-Host "  -Force         Skip interactive confirmations (install)."
-  Write-Host "  -KeepSettings  Keep settings.json on uninstall."
-  Write-Host "  -KeepPackage   Keep the npm package on uninstall."
-  Write-Host "  -Help, -h      Show this message."
+  Write-Host "  -Quiet       Suppress non-essential output."
+  Write-Host "  -Force       Skip interactive confirmations."
+  Write-Host "  -WipeConfig  On uninstall, also delete settings.json. Off by default;"
+  Write-Host "               always confirms unless -Force is also given."
+  Write-Host "  -Help, -h    Show this message."
 }
 
 function Invoke-Uninstall {
@@ -399,16 +398,21 @@ function Invoke-Uninstall {
     }
   }
 
-  $settingsPath = Get-SettingsPath
-  if (-not $KeepSettings -and (Test-Path -LiteralPath $settingsPath)) {
-    Remove-Item -LiteralPath $settingsPath -Force
-    Write-Host "Removed $settingsPath" -ForegroundColor Cyan
+  if ($WipeConfig) {
+    if (-not $Force) {
+      Write-Host "This will also delete settings.json (theme, password, favorite models, etc.)." -ForegroundColor Yellow
+      $choice = Read-Choice -Prompt "Are you sure? [Y]es, [N]o?" -ValidChoices @("Y", "N")
+      if ($choice -eq "N") { exit 0 }
+    }
+    $settingsPath = Get-SettingsPath
+    if (Test-Path -LiteralPath $settingsPath) {
+      Remove-Item -LiteralPath $settingsPath -Force
+      Write-Host "Removed $settingsPath" -ForegroundColor Cyan
+    }
   }
 
-  if (-not $KeepPackage) {
-    npm uninstall -g @openchamber/web 2>&1 | Out-Null
-    Write-Host "Uninstalled npm package @openchamber/web." -ForegroundColor Cyan
-  }
+  npm uninstall -g @openchamber/web 2>&1 | Out-Null
+  Write-Host "Uninstalled npm package @openchamber/web." -ForegroundColor Cyan
 
   Write-Host "OpenChamber cleanup complete." -ForegroundColor Green
 }

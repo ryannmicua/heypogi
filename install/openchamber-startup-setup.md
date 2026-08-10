@@ -15,19 +15,19 @@ Manage the OpenChamber web UI lifecycle from heypogi with one script: install, u
 | `start` | Start detached/hidden via the VBS launcher and wait for health. |
 | `stop` | Stop the running instance (official `openchamber stop`, plus kill fallback on the configured port). |
 | `status` | Show version, settings, listening state, health, Run key, wrappers, password status. |
-| `uninstall` | Stop, remove Run key + wrappers + settings, and `npm uninstall -g @openchamber/web`. Use `-KeepSettings` / `-KeepPackage` to preserve either. |
+| `uninstall` | Stop, remove Run key + wrappers, and `npm uninstall -g @openchamber/web`. Keeps `settings.json` by default - pass `-WipeConfig` to also delete it (always confirms unless `-Force` is given too). |
 
 All commands take `-Quiet` (no prompts/output) and `-Force` (skip confirmation prompts). Run from PowerShell:
 
 ```powershell
-& "C:\Users\rmicua\myrepo\heypogi\install\scripts\openchamber.ps1" status
+& "C:\Users\rmicua\myrepo\heypogi\install\scripts\openchamber-ctl.ps1" status
 ```
 
 ## Quick start (new machine)
 
 ```powershell
 # 1. Install/update the npm package
-& "$env:HEYPOGI_ROOT\install\scripts\openchamber.ps1" install
+& "$env:HEYPOGI_ROOT\install\scripts\openchamber-ctl.ps1" install
 
 # 2. Optional: set a UI password for the browser interface
 #    (edit ~/.config/openchamber/settings.json and set "password")
@@ -35,10 +35,10 @@ All commands take `-Quiet` (no prompts/output) and `-Force` (skip confirmation p
 #    [Environment]::SetEnvironmentVariable("OPENCHAMBER_UI_PASSWORD", "yourpassword", "User")
 
 # 3. Start it
-& "$env:HEYPOGI_ROOT\install\scripts\openchamber.ps1" start
+& "$env:HEYPOGI_ROOT\install\scripts\openchamber-ctl.ps1" start
 
 # 4. Verify
-& "$env:HEYPOGI_ROOT\install\scripts\openchamber.ps1" status
+& "$env:HEYPOGI_ROOT\install\scripts\openchamber-ctl.ps1" status
 ```
 
 ## Settings file
@@ -60,7 +60,7 @@ The generated `startup.ps1` re-reads the machine settings file at launch, so you
 ## Updating
 
 ```powershell
-& "$env:HEYPOGI_ROOT\install\scripts\openchamber.ps1" install
+& "$env:HEYPOGI_ROOT\install\scripts\openchamber-ctl.ps1" install
 ```
 
 The script stops the running daemon first - this matters: on Windows, npm cannot replace `better-sqlite3.node` while the server holds it (EPERM). It also configures npm `allow-scripts=better-sqlite3,node-pty` so the native addons build/install correctly.
@@ -68,10 +68,12 @@ The script stops the running daemon first - this matters: on Windows, npm cannot
 ## Cleanup
 
 ```powershell
-& "$env:HEYPOGI_ROOT\install\scripts\openchamber.ps1" uninstall
+& "$env:HEYPOGI_ROOT\install\scripts\openchamber-ctl.ps1" uninstall
 ```
 
-Stops the server, removes the Run key, deletes the wrappers and settings, and uninstalls the npm package.
+Stops the server, removes the Run key, deletes the wrappers, and uninstalls
+the npm package. Add `-WipeConfig` to also delete `settings.json` (always
+confirms unless `-Force` is given too).
 
 ## Why the wrapper scripts exist
 

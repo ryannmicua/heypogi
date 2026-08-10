@@ -25,13 +25,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install/scripts/dev-stack.ps
 
 | Command | What it does |
 |---------|--------------|
-| `install` | Explicit full setup: detects missing/outdated tools, runs the installers (`install-opencode-cli.ps1`, `install-openchamber.ps1`, `install-paseo-cli.ps1`), restarts daemons, then ensures autostart + config (Run key, scheduled task, `0.0.0.0` listen, web UI, password reminders) and verifies. Idempotent - safe to re-run. |
+| `install` | Explicit full setup: detects missing/outdated tools, runs the installers (`opencode-ctl.ps1`, `openchamber-ctl.ps1`, `paseo-ctl.ps1`), restarts daemons, then ensures autostart + config (Run key, scheduled task, `0.0.0.0` listen, web UI, password reminders) and verifies. Idempotent - safe to re-run. |
 | `update` | Alias for `install`. |
 | `status` (default) | Read-only check of the intended state. Exit code 0 = all good, 1 = issues found, 2 = could not verify (npm offline). |
 | `fix` | Repairs runtime state: restarts stopped daemons, re-registers autostart, fixes listen config to `0.0.0.0` (prompted unless `-Force`), then re-verifies. |
 | `start` | Starts OpenChamber + Paseo daemon (no-op if already running). |
 | `stop` | Stops OpenChamber + Paseo daemon. |
-| `startup <verb> [-App <app>]` | Manage autostart-at-login registration per tool. See below. |
+| `startup <verb> [-App <app>]` | Manage autostart-at-login registration per tool (package stays installed). See below. |
+| `uninstall -App <app>` | Full teardown per tool: stop, remove autostart, `npm uninstall -g` the package. See below. |
 
 `status`, `start`, and `stop` accept `-App <opencode\|openchamber\|paseo\|all>`
 (alias `paseo-cli`; `--app` also works) to target just one tool instead of all
@@ -75,6 +76,35 @@ sidecar, not a standalone daemon - so every verb is a no-op message for it.
 This means `--app all` never errors on it. Registering/enabling the Paseo
 scheduled task requires an elevated shell (it runs with `RunLevel Highest`);
 run from an Admin PowerShell if you hit "Access is denied".
+
+## `uninstall` - full lifecycle teardown
+
+```powershell
+install/scripts/dev-stack.ps1 uninstall -App <opencode|openchamber|paseo|all> [-WipeConfig]
+```
+
+Unlike `startup uninstall` (which only removes the autostart registration),
+this stops the app, removes its autostart, and runs `npm uninstall -g` for
+its package. `-App` has no default here - it's destructive, so you must name
+what to remove. Delegates to each tool's own control script:
+
+| App | Delegates to | Package removed |
+|-----|---------------|------------------|
+| `opencode` | `opencode-ctl.ps1 uninstall` | `opencode-ai` |
+| `openchamber` | `openchamber-ctl.ps1 uninstall` | `@openchamber/web` |
+| `paseo` | `paseo-ctl.ps1 uninstall` | `@getpaseo/cli` (also unregisters the `PaseoDaemon` scheduled task) |
+
+Config/settings are **kept by default** (OpenChamber's `settings.json`,
+Paseo's `~/.paseo` including any provider API keys, OpenCode's
+`~/.config/opencode`). Pass `-WipeConfig` to also remove them - each control
+script always asks for confirmation before wiping config, even with
+`-WipeConfig`, unless `-Force` is given too.
+
+```powershell
+install/scripts/dev-stack.ps1 uninstall --app paseo-cli              # keeps ~/.paseo
+install/scripts/dev-stack.ps1 uninstall --app opencode -WipeConfig   # prompts, then wipes config too
+install/scripts/dev-stack.ps1 uninstall --app all -WipeConfig -Force # full wipe, no prompts
+```
 
 ## Fresh machine workflow
 
@@ -135,7 +165,7 @@ Additional checks:
   `...\@getpaseo\server\dist\server\server\daemon-worker.js`).
 - For Paseo, "available version" considers both the `latest` and `beta` npm
   dist-tags and reports both; the newest of the two is used for the up-to-date
-  check and for installs. `install`/`install-paseo-cli.ps1` install
+  check and for installs. `install`/`paseo-ctl.ps1` install
   `@getpaseo/cli@beta` when it is newer than `latest`, else `@getpaseo/cli@latest`.
 - Paseo desktop app (if installed at `%LOCALAPPDATA%\Programs\Paseo\Paseo.exe`)
   is checked for its own version against the same available versions, so a
