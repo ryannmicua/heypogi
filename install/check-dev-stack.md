@@ -33,6 +33,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install/scripts/check-dev-st
 | `stop` | Stops OpenChamber + Paseo daemon. |
 | `startup <verb> [-App <app>]` | Manage autostart-at-login registration per tool. See below. |
 
+`status`, `start`, and `stop` accept `-App <opencode\|openchamber\|paseo\|all>`
+(alias `paseo-cli`; `--app` also works) to target just one tool instead of all
+three - e.g. `check-dev-stack.ps1 stop --app paseo-cli` stops only the Paseo
+daemon, leaving OpenChamber running. Defaults to all tools when omitted.
+OpenCode has no daemon of its own (it runs as an OpenChamber sidecar), so
+`start`/`stop --app opencode` are no-ops that just explain that.
+
 All commands accept `-Quiet` (suppress prompts/output) and `-Force` (skip
 confirmation prompts). `install` and `fix` prompt before any destructive
 action (stopping daemons, editing config files) unless `-Force` is given.

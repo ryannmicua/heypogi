@@ -332,6 +332,29 @@ function Write-CheckResult {
   Write-Host ("  {0,-28}: {1}{2}" -f $Check.Check, $mark, $detail) -ForegroundColor $color
 }
 
+# Map an internal app id (opencode/openchamber/paseo) to its Check "Service" name.
+function Get-ServiceName {
+  param([string]$AppId)
+  switch ($AppId) {
+    "opencode"    { return "OpenCode" }
+    "openchamber" { return "OpenChamber" }
+    "paseo"       { return "Paseo" }
+  }
+  return $null
+}
+
+# Narrow $script:Checks down to only the services for the given -App value.
+# No-op when $App is empty/"all".
+function Limit-ChecksToApp {
+  param([string]$App)
+  if ([string]::IsNullOrWhiteSpace($App) -or $App.ToLowerInvariant() -eq "all") { return }
+  $apps = Resolve-AppList -App $App
+  $serviceNames = $apps | ForEach-Object { Get-ServiceName $_ }
+  $filtered = @($script:Checks | Where-Object { $serviceNames -contains $_.Service })
+  $script:Checks = [System.Collections.Generic.List[object]]::new()
+  foreach ($row in $filtered) { $script:Checks.Add($row) }
+}
+
 function Write-StatusReport {
   $services = @("OpenCode", "OpenChamber", "Paseo")
   foreach ($svc in $services) {
@@ -957,25 +980,43 @@ function Invoke-Startup {
 
 # ---------- start / stop ----------
 function Invoke-Start {
-  if (-not (Get-ListeningPid -Port $OpenChamberPort)) {
-    Write-Host "Starting OpenChamber..." -ForegroundColor Cyan
-    Safe-Invoke -What "Starting OpenChamber" -Body { & (Join-Path $PSScriptRoot "openchamber.ps1") start }
-  } else {
-    Write-Host "OpenChamber already running." -ForegroundColor Green
+  param([string]$App)
+  $apps = Resolve-AppList -App $App
+  if ($apps -contains "opencode") {
+    Write-Host "OpenCode: nothing to start on its own - it runs as an OpenChamber sidecar, not a standalone daemon." -ForegroundColor Yellow
   }
-  if (-not (Get-ListeningPid -Port $PaseoPort)) {
-    Write-Host "Starting Paseo daemon..." -ForegroundColor Cyan
-    Safe-Invoke -What "Starting Paseo daemon" -Body { Invoke-PaseoDaemon start }
-  } else {
-    Write-Host "Paseo daemon already running." -ForegroundColor Green
+  if ($apps -contains "openchamber") {
+    if (-not (Get-ListeningPid -Port $OpenChamberPort)) {
+      Write-Host "Starting OpenChamber..." -ForegroundColor Cyan
+      Safe-Invoke -What "Starting OpenChamber" -Body { & (Join-Path $PSScriptRoot "openchamber.ps1") start }
+    } else {
+      Write-Host "OpenChamber already running." -ForegroundColor Green
+    }
+  }
+  if ($apps -contains "paseo") {
+    if (-not (Get-ListeningPid -Port $PaseoPort)) {
+      Write-Host "Starting Paseo daemon..." -ForegroundColor Cyan
+      Safe-Invoke -What "Starting Paseo daemon" -Body { Invoke-PaseoDaemon start }
+    } else {
+      Write-Host "Paseo daemon already running." -ForegroundColor Green
+    }
   }
 }
 
 function Invoke-Stop {
-  Write-Host "Stopping OpenChamber..." -ForegroundColor Cyan
-  Safe-Invoke -What "Stopping OpenChamber" -Body { & (Join-Path $PSScriptRoot "openchamber.ps1") stop }
-  Write-Host "Stopping Paseo daemon..." -ForegroundColor Cyan
-  Safe-Invoke -What "Stopping Paseo daemon" -Body { & paseo daemon stop }
+  param([string]$App)
+  $apps = Resolve-AppList -App $App
+  if ($apps -contains "opencode") {
+    Write-Host "OpenCode: nothing to stop on its own - it runs as an OpenChamber sidecar, not a standalone daemon." -ForegroundColor Yellow
+  }
+  if ($apps -contains "openchamber") {
+    Write-Host "Stopping OpenChamber..." -ForegroundColor Cyan
+    Safe-Invoke -What "Stopping OpenChamber" -Body { & (Join-Path $PSScriptRoot "openchamber.ps1") stop }
+  }
+  if ($apps -contains "paseo") {
+    Write-Host "Stopping Paseo daemon..." -ForegroundColor Cyan
+    Safe-Invoke -What "Stopping Paseo daemon" -Body { & paseo daemon stop }
+  }
 }
 
 # ---------- help ----------
@@ -995,6 +1036,9 @@ function Show-Help {
   Write-Host "  stop     Stop OpenChamber and the Paseo daemon."
   Write-Host "  startup  Manage autostart-at-login registration. See below."
   Write-Host "  help     Show this help."
+  Write-Host ""
+  Write-Host "status/start/stop accept -App <opencode|openchamber|paseo|all> to target"
+  Write-Host "just one app instead of all three (defaults to all when omitted)."
   Write-Host ""
   Write-Host "startup subcommands:" -ForegroundColor Cyan
   Write-Host "  enable    <-App app>   Turn autostart on (registers it if missing). Defaults to -App all."
@@ -1019,12 +1063,16 @@ function Show-Help {
   Write-Host "  .\$exe startup install --app all"
   Write-Host "  .\$exe startup uninstall --app paseo-cli"
   Write-Host "  .\$exe startup disable   # disables autostart for all apps"
+  Write-Host "  .\$exe start --app paseo-cli"
+  Write-Host "  .\$exe stop --app openchamber"
+  Write-Host "  .\$exe status --app opencode"
 }
 
 # ---------- dispatch ----------
 switch ($Command) {
   "status" {
     Collect-Status
+    Limit-ChecksToApp -App $App
     Write-StatusReport
     $count = Get-IssueCount
     exit $(if ($count -eq 0) { 0 } else { 1 })
@@ -1032,8 +1080,8 @@ switch ($Command) {
   "install" { Invoke-Install }
   "update"  { Invoke-Install }
   "fix"     { Invoke-Fix }
-  "start"   { Invoke-Start }
-  "stop"    { Invoke-Stop }
+  "start"   { Invoke-Start -App $App }
+  "stop"    { Invoke-Stop -App $App }
   "startup" { Invoke-Startup -SubCommand $SubCommand -App $App }
   "help"    { Show-Help }
 }
