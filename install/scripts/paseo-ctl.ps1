@@ -1,7 +1,6 @@
 [CmdletBinding()]
 param(
   [Parameter(Position = 0)]
-  [ValidateSet("install", "update", "status", "start", "stop", "uninstall", "help")]
   [string]$Command = "status",
   [switch]$Quiet,
   [switch]$Force,
@@ -9,6 +8,8 @@ param(
   [Alias("h")]
   [switch]$Help
 )
+
+$ValidCommands = @("install", "update", "status", "start", "stop", "uninstall", "help")
 
 $ErrorActionPreference = "Stop"
 $PaseoTaskName = "PaseoDaemon"
@@ -366,6 +367,14 @@ function Invoke-Help {
 # ---------- dispatch ----------
 if ($Command -eq "update") { $Command = "install" }
 if ($Help) { $Command = "help" }
+$Command = $Command.ToLowerInvariant()
+if ($ValidCommands -notcontains $Command) {
+  Write-Host "Unknown command '$Command'." -ForegroundColor Red
+  Write-Host "Valid commands: $($ValidCommands -join ', ')" -ForegroundColor Yellow
+  Write-Host ""
+  Invoke-Help
+  exit 1
+}
 
 switch ($Command) {
   "install"   { Invoke-Install }

@@ -1,9 +1,27 @@
 [CmdletBinding()]
 param(
-  [switch]$Quiet
+  [switch]$Quiet,
+  [Alias("h")]
+  [switch]$Help
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($Help) {
+  Write-Host "setup-environment.ps1 - set HEYPOGI_ROOT / OPENCODE_CONFIG_DIR" -ForegroundColor Green
+  Write-Host ""
+  Write-Host "Usage: setup-environment.ps1 [-Quiet]"
+  Write-Host ""
+  Write-Host "Sets the HEYPOGI_ROOT and OPENCODE_CONFIG_DIR user environment variables"
+  Write-Host "to this repo's location, then calls write-profile.ps1 to make them"
+  Write-Host "available in PowerShell profiles too (for shells that don't inherit a"
+  Write-Host "fresh registry read, e.g. IntelliJ terminals)."
+  Write-Host ""
+  Write-Host "Flags:"
+  Write-Host "  -Quiet     Overwrite an existing differing value without asking."
+  Write-Host "  -Help, -h  Show this message."
+  exit 0
+}
 
 function Read-Choice {
   param([string]$Prompt, [string[]]$ValidChoices)

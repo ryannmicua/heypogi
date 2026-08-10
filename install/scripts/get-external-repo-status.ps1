@@ -1,10 +1,34 @@
 [CmdletBinding()]
 param(
-  [ValidateRange(1, 3650)]
-  [int]$MaxAgeDays = 7
+  [int]$MaxAgeDays = 7,
+  [Alias("h")]
+  [switch]$Help
 )
 
 $ErrorActionPreference = "Stop"
+
+function Show-Help {
+  Write-Host "get-external-repo-status.ps1 - report staleness of external repo clones" -ForegroundColor Green
+  Write-Host ""
+  Write-Host "Usage: get-external-repo-status.ps1 [-MaxAgeDays <1-3650>]"
+  Write-Host ""
+  Write-Host "Checks compound-engineering, compound-knowledge, and opencode against"
+  Write-Host "external/.repo-update-status.json. Exits 1 if any is missing a record or"
+  Write-Host "older than -MaxAgeDays (default 7)."
+  Write-Host ""
+  Write-Host "Flags:"
+  Write-Host "  -MaxAgeDays  Days before a repo is considered stale. Default 7."
+  Write-Host "  -Help, -h    Show this message."
+}
+
+if ($Help) { Show-Help; exit 0 }
+
+if ($MaxAgeDays -lt 1 -or $MaxAgeDays -gt 3650) {
+  Write-Host "Invalid -MaxAgeDays '$MaxAgeDays' - must be between 1 and 3650." -ForegroundColor Red
+  Write-Host ""
+  Show-Help
+  exit 1
+}
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\\..")).Path
 $statusPath = Join-Path $repoRoot "external\\.repo-update-status.json"

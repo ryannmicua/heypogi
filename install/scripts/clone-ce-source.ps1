@@ -1,9 +1,25 @@
 [CmdletBinding()]
 param(
-  [switch]$Quiet
+  [switch]$Quiet,
+  [Alias("h")]
+  [switch]$Help
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($Help) {
+  Write-Host "clone-ce-source.ps1 - clone/update the Compound Engineering plugin source" -ForegroundColor Green
+  Write-Host ""
+  Write-Host "Usage: clone-ce-source.ps1 [-Quiet]"
+  Write-Host ""
+  Write-Host "Clones external/compound-engineering if missing, or pulls latest if it"
+  Write-Host "already exists (prompts unless -Quiet)."
+  Write-Host ""
+  Write-Host "Flags:"
+  Write-Host "  -Quiet     Pull without prompting."
+  Write-Host "  -Help, -h  Show this message."
+  exit 0
+}
 
 function Read-Choice {
   param([string]$Prompt, [string[]]$ValidChoices)

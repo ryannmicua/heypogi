@@ -1,15 +1,18 @@
 [CmdletBinding()]
 param(
   [Parameter(Position = 0)]
-  [ValidateSet("status", "install", "update", "fix", "start", "stop", "startup", "uninstall", "help")]
   [string]$Command = "status",
   [Parameter(Position = 1)]
   [string]$SubCommand,
   [string]$App,
   [switch]$Quiet,
   [switch]$Force,
-  [switch]$WipeConfig
+  [switch]$WipeConfig,
+  [Alias("h")]
+  [switch]$Help
 )
+
+$ValidCommands = @("status", "install", "update", "fix", "start", "stop", "startup", "uninstall", "help")
 
 $ErrorActionPreference = "Stop"
 
@@ -255,6 +258,8 @@ function Resolve-AppList {
     "paseo-cli"   { return @("paseo") }
     default {
       Write-Host "Unknown app '$App'. Valid: opencode, openchamber, paseo (alias: paseo-cli), all" -ForegroundColor Red
+      Write-Host ""
+      Show-Help
       exit 1
     }
   }
@@ -949,13 +954,22 @@ function Invoke-Startup {
   $validVerbs = @("enable", "disable", "install", "uninstall")
   $verb = if ($SubCommand) { $SubCommand.ToLowerInvariant() } else { "" }
   if ($validVerbs -notcontains $verb) {
-    Write-Host "Usage: dev-stack.ps1 startup <enable|disable|install|uninstall> [-App <opencode|openchamber|paseo|all>]" -ForegroundColor Red
+    if ([string]::IsNullOrEmpty($SubCommand)) {
+      Write-Host "startup requires a subcommand." -ForegroundColor Red
+    } else {
+      Write-Host "Unknown startup subcommand '$SubCommand'." -ForegroundColor Red
+    }
+    Write-Host "Valid: $($validVerbs -join ', ')" -ForegroundColor Yellow
+    Write-Host ""
+    Show-Help
     exit 1
   }
 
   # install/uninstall require an explicit -App; enable/disable default to all.
   if (($verb -eq "install" -or $verb -eq "uninstall") -and [string]::IsNullOrWhiteSpace($App)) {
     Write-Host "startup $verb requires -App <opencode|openchamber|paseo|all> (no default)." -ForegroundColor Red
+    Write-Host ""
+    Show-Help
     exit 1
   }
 
@@ -984,6 +998,8 @@ function Invoke-Uninstall {
 
   if ([string]::IsNullOrWhiteSpace($App)) {
     Write-Host "uninstall requires -App <opencode|openchamber|paseo|all> (no default - this is destructive)." -ForegroundColor Red
+    Write-Host ""
+    Show-Help
     exit 1
   }
 
@@ -1113,6 +1129,16 @@ function Show-Help {
 }
 
 # ---------- dispatch ----------
+if ($Help) { $Command = "help" }
+$Command = $Command.ToLowerInvariant()
+if ($ValidCommands -notcontains $Command) {
+  Write-Host "Unknown command '$Command'." -ForegroundColor Red
+  Write-Host "Valid commands: $($ValidCommands -join ', ')" -ForegroundColor Yellow
+  Write-Host ""
+  Show-Help
+  exit 1
+}
+
 switch ($Command) {
   "status" {
     Collect-Status

@@ -1,9 +1,25 @@
 [CmdletBinding()]
 param(
-  [switch]$CreateDest
+  [switch]$CreateDest,
+  [Alias("h")]
+  [switch]$Help
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($Help) {
+  Write-Host "install-skills.ps1 - link this repo's own skills" -ForegroundColor Green
+  Write-Host ""
+  Write-Host "Usage: install-skills.ps1 [-CreateDest]"
+  Write-Host ""
+  Write-Host "Junction-links src/skills into ~/.agents/skills/heypogi. If that link"
+  Write-Host "already exists, asks to overwrite, skip, or quit."
+  Write-Host ""
+  Write-Host "Flags:"
+  Write-Host "  -CreateDest  Create ~/.agents/skills if it doesn't exist yet."
+  Write-Host "  -Help, -h    Show this message."
+  exit 0
+}
 
 function Read-Choice {
   param(
