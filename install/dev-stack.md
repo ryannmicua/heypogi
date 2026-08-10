@@ -34,12 +34,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install/scripts/dev-stack.ps
 | `startup <verb> [-App <app>]` | Manage autostart-at-login registration per tool (package stays installed). See below. |
 | `uninstall -App <app>` | Full teardown per tool: stop, remove autostart, `npm uninstall -g` the package. See below. |
 
-`status`, `start`, and `stop` accept `-App <opencode\|openchamber\|paseo\|all>`
-(alias `paseo-cli`; `--app` also works) to target just one tool instead of all
-three - e.g. `dev-stack.ps1 stop --app paseo-cli` stops only the Paseo
-daemon, leaving OpenChamber running. Defaults to all tools when omitted.
-OpenCode has no daemon of its own (it runs as an OpenChamber sidecar), so
-`start`/`stop --app opencode` are no-ops that just explain that.
+`status`, `start`, and `stop` accept `-App <opencode|openchamber|paseo|all>`
+(alias `paseo-cli`) to target just one tool instead of all three - e.g.
+`dev-stack.ps1 stop -App paseo-cli` stops only the Paseo daemon, leaving
+OpenChamber running. Defaults to all tools when omitted. OpenCode has no
+daemon of its own (it runs as an OpenChamber sidecar), so
+`start`/`stop -App opencode` are no-ops that just explain that.
+
+Use single-dash flags (`-App`, `-Quiet`, `-Force`, ...) - `-App` only
+resolves to `-App` when the script is launched via `powershell -File`;
+running it directly (`.\dev-stack.ps1 ...` or `& dev-stack.ps1 ...`, the
+normal way) does **not** translate `--` to `-`, and `-App opencode` will
+fail with `A positional parameter cannot be found that accepts argument
+'opencode'`.
 
 All commands accept `-Quiet` (suppress prompts/output) and `-Force` (skip
 confirmation prompts). `install` and `fix` prompt before any destructive
@@ -51,9 +58,7 @@ action (stopping daemons, editing config files) unless `-Force` is given.
 install/scripts/dev-stack.ps1 startup <enable|disable|install|uninstall> [-App <app>]
 ```
 
-`-App` also accepts the double-dash form (`--app`), since PowerShell parameter
-binding treats them the same. Valid apps: `opencode`, `openchamber`, `paseo`
-(alias `paseo-cli`), `all`.
+Valid apps: `opencode`, `openchamber`, `paseo` (alias `paseo-cli`), `all`.
 
 | Verb | `-App` required? | What it does |
 |------|-------------------|--------------|
@@ -65,15 +70,15 @@ binding treats them the same. Valid apps: `opencode`, `openchamber`, `paseo`
 Examples:
 
 ```powershell
-install/scripts/dev-stack.ps1 startup enable --app opencode
-install/scripts/dev-stack.ps1 startup install --app all
-install/scripts/dev-stack.ps1 startup uninstall --app paseo-cli
+install/scripts/dev-stack.ps1 startup enable -App opencode
+install/scripts/dev-stack.ps1 startup install -App all
+install/scripts/dev-stack.ps1 startup uninstall -App paseo-cli
 install/scripts/dev-stack.ps1 startup disable   # all apps
 ```
 
 OpenCode has no autostart mechanism of its own - it runs as an OpenChamber
 sidecar, not a standalone daemon - so every verb is a no-op message for it.
-This means `--app all` never errors on it. Registering/enabling the Paseo
+This means `-App all` never errors on it. Registering/enabling the Paseo
 scheduled task requires an elevated shell (it runs with `RunLevel Highest`);
 run from an Admin PowerShell if you hit "Access is denied".
 
@@ -101,9 +106,9 @@ script always asks for confirmation before wiping config, even with
 `-WipeConfig`, unless `-Force` is given too.
 
 ```powershell
-install/scripts/dev-stack.ps1 uninstall --app paseo-cli              # keeps ~/.paseo
-install/scripts/dev-stack.ps1 uninstall --app opencode -WipeConfig   # prompts, then wipes config too
-install/scripts/dev-stack.ps1 uninstall --app all -WipeConfig -Force # full wipe, no prompts
+install/scripts/dev-stack.ps1 uninstall -App paseo-cli              # keeps ~/.paseo
+install/scripts/dev-stack.ps1 uninstall -App opencode -WipeConfig   # prompts, then wipes config too
+install/scripts/dev-stack.ps1 uninstall -App all -WipeConfig -Force # full wipe, no prompts
 ```
 
 ## Fresh machine workflow
