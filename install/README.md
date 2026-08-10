@@ -9,7 +9,7 @@ apps as servers):
 | **OpenChamber** | Web UI server (with OpenCode sidecar) | `0.0.0.0:7777` | HKCU `Run` key |
 | **Paseo** | Headless agent daemon + web UI | `0.0.0.0:6767` | Scheduled task `PaseoDaemon` |
 
-The intended state, verified by `check-dev-stack.ps1`:
+The intended state, verified by `dev-stack.ps1`:
 
 - All three **up to date** (checked against the npm registry).
 - **CLI installs only** — the listening processes must be the npm binaries
@@ -26,7 +26,7 @@ The intended state, verified by `check-dev-stack.ps1`:
 # 1. Prerequisite: Node.js (https://nodejs.org) - required by npm
 
 # 2. One command: installs all three tools + configures autostarts + verifies
-install/scripts/check-dev-stack.ps1 install
+install/scripts/dev-stack.ps1 install
 
 # 3. Manual: set the two UI passwords (interactive, cannot be automated;
 #    the script prints reminders when they are missing)
@@ -40,13 +40,13 @@ paseo daemon set-password
 #         %APPDATA%\Paseo\desktop-settings.json
 
 # 5. Confirm everything is as intended
-install/scripts/check-dev-stack.ps1 status
+install/scripts/dev-stack.ps1 status
 ```
 
-## Supervisor — `install/scripts/check-dev-stack.ps1`
+## Supervisor — `install/scripts/dev-stack.ps1`
 
 One entry point for the whole stack. Full reference:
-[`check-dev-stack.md`](check-dev-stack.md).
+[`dev-stack.md`](dev-stack.md).
 
 | Command | Role |
 |---------|------|
@@ -56,7 +56,7 @@ One entry point for the whole stack. Full reference:
 | `start` / `stop` | Control both daemons. |
 
 Every check it performs, plus autostart/health details:
-[`check-dev-stack.md`](check-dev-stack.md).
+[`dev-stack.md`](dev-stack.md).
 
 ## Config files
 
@@ -85,7 +85,7 @@ steps, which is why `status` verifies them explicitly.
 
 | Doc | Covers |
 |-----|--------|
-| [`check-dev-stack.md`](check-dev-stack.md) | Supervisor commands, every status check, fresh-machine workflow |
+| [`dev-stack.md`](dev-stack.md) | Supervisor commands, every status check, fresh-machine workflow |
 | [`openchamber-startup-setup.md`](openchamber-startup-setup.md) | OpenChamber lifecycle script (`openchamber.ps1`), settings, wrappers, OpenCode sidecar env vars |
 | [`install-openchamber.md`](install-openchamber.md) | The `install-openchamber.ps1` wrapper |
 | [`install-opencode-cli.md`](install-opencode-cli.md) | OpenCode CLI installer |

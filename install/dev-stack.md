@@ -20,7 +20,7 @@ All three are installed as npm CLIs. The script has a strict separation:
 ## Usage
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File install/scripts/check-dev-stack.ps1 [command]
+powershell -NoProfile -ExecutionPolicy Bypass -File install/scripts/dev-stack.ps1 [command]
 ```
 
 | Command | What it does |
@@ -35,7 +35,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install/scripts/check-dev-st
 
 `status`, `start`, and `stop` accept `-App <opencode\|openchamber\|paseo\|all>`
 (alias `paseo-cli`; `--app` also works) to target just one tool instead of all
-three - e.g. `check-dev-stack.ps1 stop --app paseo-cli` stops only the Paseo
+three - e.g. `dev-stack.ps1 stop --app paseo-cli` stops only the Paseo
 daemon, leaving OpenChamber running. Defaults to all tools when omitted.
 OpenCode has no daemon of its own (it runs as an OpenChamber sidecar), so
 `start`/`stop --app opencode` are no-ops that just explain that.
@@ -47,7 +47,7 @@ action (stopping daemons, editing config files) unless `-Force` is given.
 ## `startup` - per-app autostart management
 
 ```powershell
-install/scripts/check-dev-stack.ps1 startup <enable|disable|install|uninstall> [-App <app>]
+install/scripts/dev-stack.ps1 startup <enable|disable|install|uninstall> [-App <app>]
 ```
 
 `-App` also accepts the double-dash form (`--app`), since PowerShell parameter
@@ -64,10 +64,10 @@ binding treats them the same. Valid apps: `opencode`, `openchamber`, `paseo`
 Examples:
 
 ```powershell
-install/scripts/check-dev-stack.ps1 startup enable --app opencode
-install/scripts/check-dev-stack.ps1 startup install --app all
-install/scripts/check-dev-stack.ps1 startup uninstall --app paseo-cli
-install/scripts/check-dev-stack.ps1 startup disable   # all apps
+install/scripts/dev-stack.ps1 startup enable --app opencode
+install/scripts/dev-stack.ps1 startup install --app all
+install/scripts/dev-stack.ps1 startup uninstall --app paseo-cli
+install/scripts/dev-stack.ps1 startup disable   # all apps
 ```
 
 OpenCode has no autostart mechanism of its own - it runs as an OpenChamber
@@ -82,7 +82,7 @@ run from an Admin PowerShell if you hit "Access is denied".
 # 1. Install Node.js first (https://nodejs.org) - required by npm
 
 # 2. One command: installs everything + configures autostarts + verifies
-install/scripts/check-dev-stack.ps1 install
+install/scripts/dev-stack.ps1 install
 
 # 3. Only manual step: set the two UI passwords (interactive, cannot be
 #    automated - the script prints reminders when they are missing)
@@ -90,7 +90,7 @@ paseo daemon set-password
 [Environment]::SetEnvironmentVariable("OPENCHAMBER_UI_PASSWORD", "yourpassword", "User")
 
 # 4. Confirm everything is as intended
-install/scripts/check-dev-stack.ps1 status
+install/scripts/dev-stack.ps1 status
 ```
 
 ## Paseo desktop app (optional, manual)

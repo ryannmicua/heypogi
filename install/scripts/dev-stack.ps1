@@ -369,7 +369,7 @@ function Write-StatusReport {
   if ($issues.Count -eq 0) {
     Write-Host "All checks passed." -ForegroundColor Green
   } else {
-    Write-Host "$($issues.Count) issue(s) found. Run: $PSScriptRoot\check-dev-stack.ps1 fix" -ForegroundColor Yellow
+    Write-Host "$($issues.Count) issue(s) found. Run: $PSScriptRoot\dev-stack.ps1 fix" -ForegroundColor Yellow
   }
 }
 
@@ -857,7 +857,7 @@ function Set-OpenChamberAutoStartSetting {
   param([bool]$Enabled)
   $settingsPath = Join-Path $env:USERPROFILE ".config\openchamber\settings.json"
   if (-not (Test-Path -LiteralPath $settingsPath)) {
-    Write-Host "OpenChamber settings not found ($settingsPath). Run 'check-dev-stack.ps1 install' first." -ForegroundColor Red
+    Write-Host "OpenChamber settings not found ($settingsPath). Run 'dev-stack.ps1 install' first." -ForegroundColor Red
     return $false
   }
   $raw = Get-Content -LiteralPath $settingsPath -Raw
@@ -953,7 +953,7 @@ function Invoke-Startup {
   $validVerbs = @("enable", "disable", "install", "uninstall")
   $verb = if ($SubCommand) { $SubCommand.ToLowerInvariant() } else { "" }
   if ($validVerbs -notcontains $verb) {
-    Write-Host "Usage: check-dev-stack.ps1 startup <enable|disable|install|uninstall> [-App <opencode|openchamber|paseo|all>]" -ForegroundColor Red
+    Write-Host "Usage: dev-stack.ps1 startup <enable|disable|install|uninstall> [-App <opencode|openchamber|paseo|all>]" -ForegroundColor Red
     exit 1
   }
 
@@ -1021,7 +1021,7 @@ function Invoke-Stop {
 
 # ---------- help ----------
 function Show-Help {
-  $exe = "check-dev-stack.ps1"
+  $exe = "dev-stack.ps1"
   Write-Host "Usage: .\$exe [command] [options]" -ForegroundColor Cyan
   Write-Host ""
   Write-Host "Supervisor for the dev stack (OpenCode, OpenChamber, Paseo):" -ForegroundColor White
