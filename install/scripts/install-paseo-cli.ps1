@@ -183,7 +183,10 @@ if (-not $Quiet) {
 }
 
 $installSpec = if ($target -eq $paseoBeta -and $target -ne $paseoLatest) { "@getpaseo/cli@beta" } else { "@getpaseo/cli@latest" }
-$out = npm install -g $installSpec 2>&1
+$out = & {
+  $ErrorActionPreference = "Continue"
+  npm install -g $installSpec 2>&1
+}
 $exitCode = $LASTEXITCODE
 $outString = $out | Out-String
 

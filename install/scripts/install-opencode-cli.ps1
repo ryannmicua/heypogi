@@ -77,7 +77,26 @@ if ($exitCode -ne 0) {
   exit $exitCode
 }
 
-# ---------- verify ----------
+# ---------- verify (self-heal if postinstall didn't run, e.g. older npm ignoring --allow-scripts) ----------
+$npmRoot = (& npm root -g 2>$null | Select-Object -Last 1)
+$binPath = if ($npmRoot) { Join-Path $npmRoot "opencode-ai\bin\opencode.exe" } else { $null }
+if ($binPath -and (Test-Path $binPath)) {
+  $header = [System.IO.File]::ReadAllBytes($binPath) | Select-Object -First 2
+  $isPe = ($header.Count -eq 2 -and $header[0] -eq 0x4D -and $header[1] -eq 0x5A) # "MZ"
+  if (-not $isPe) {
+    if (-not $Quiet) {
+      Write-Host "opencode.exe is a stub (postinstall didn't run) - running it manually..." -ForegroundColor Yellow
+    }
+    $postinstallDir = Join-Path $npmRoot "opencode-ai"
+    Push-Location $postinstallDir
+    try {
+      node postinstall.mjs
+    } finally {
+      Pop-Location
+    }
+  }
+}
+
 $newVersion = & "opencode" "--version" 2>$null
 if (-not $newVersion) {
   Write-Host "Install succeeded but 'opencode --version' failed. Check your PATH." -ForegroundColor Yellow

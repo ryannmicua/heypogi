@@ -31,10 +31,50 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install/scripts/check-dev-st
 | `fix` | Repairs runtime state: restarts stopped daemons, re-registers autostart, fixes listen config to `0.0.0.0` (prompted unless `-Force`), then re-verifies. |
 | `start` | Starts OpenChamber + Paseo daemon (no-op if already running). |
 | `stop` | Stops OpenChamber + Paseo daemon. |
+| `startup <verb> [-App <app>]` | Manage autostart-at-login registration per tool. See below. |
+
+`status`, `start`, and `stop` accept `-App <opencode\|openchamber\|paseo\|all>`
+(alias `paseo-cli`; `--app` also works) to target just one tool instead of all
+three - e.g. `check-dev-stack.ps1 stop --app paseo-cli` stops only the Paseo
+daemon, leaving OpenChamber running. Defaults to all tools when omitted.
+OpenCode has no daemon of its own (it runs as an OpenChamber sidecar), so
+`start`/`stop --app opencode` are no-ops that just explain that.
 
 All commands accept `-Quiet` (suppress prompts/output) and `-Force` (skip
 confirmation prompts). `install` and `fix` prompt before any destructive
 action (stopping daemons, editing config files) unless `-Force` is given.
+
+## `startup` - per-app autostart management
+
+```powershell
+install/scripts/check-dev-stack.ps1 startup <enable|disable|install|uninstall> [-App <app>]
+```
+
+`-App` also accepts the double-dash form (`--app`), since PowerShell parameter
+binding treats them the same. Valid apps: `opencode`, `openchamber`, `paseo`
+(alias `paseo-cli`), `all`.
+
+| Verb | `-App` required? | What it does |
+|------|-------------------|--------------|
+| `enable` | No - defaults to `all` | Turns autostart on. Registers it from scratch if not already installed. |
+| `disable` | No - defaults to `all` | Turns autostart off (removes the OpenChamber Run key / disables the Paseo scheduled task) but leaves the underlying install in place. |
+| `install` | Yes | Registers the autostart mechanism from scratch (OpenChamber Run key + startup wrappers, or the Paseo `PaseoDaemon` scheduled task). |
+| `uninstall` | Yes | Removes the autostart mechanism entirely (OpenChamber Run key + wrapper files, or unregisters the Paseo scheduled task). |
+
+Examples:
+
+```powershell
+install/scripts/check-dev-stack.ps1 startup enable --app opencode
+install/scripts/check-dev-stack.ps1 startup install --app all
+install/scripts/check-dev-stack.ps1 startup uninstall --app paseo-cli
+install/scripts/check-dev-stack.ps1 startup disable   # all apps
+```
+
+OpenCode has no autostart mechanism of its own - it runs as an OpenChamber
+sidecar, not a standalone daemon - so every verb is a no-op message for it.
+This means `--app all` never errors on it. Registering/enabling the Paseo
+scheduled task requires an elevated shell (it runs with `RunLevel Highest`);
+run from an Admin PowerShell if you hit "Access is denied".
 
 ## Fresh machine workflow
 
