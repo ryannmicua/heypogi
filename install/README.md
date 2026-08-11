@@ -19,6 +19,9 @@ The intended state, verified by `dev-stack.ps1`:
 - **Autostart at login** for OpenChamber and Paseo.
 - **One Paseo daemon** — the headless CLI one. The optional Paseo desktop app
   connects to it as a client with "Manage built-in daemon" disabled.
+- **One OpenChamber server** — the headless CLI one. The optional OpenChamber
+  desktop app connects to it as a client with `OPENCHAMBER_SKIP_LOCAL_SERVER=1`
+  and the CLI server added to its host list.
 
 ## Setup order
 
@@ -38,6 +41,10 @@ paseo daemon set-password
 #    - disable "Manage built-in daemon" (Settings -> Daemon)
 #      -> persists as "manageBuiltInDaemon": false in
 #         %APPDATA%\Paseo\desktop-settings.json
+
+# 4b. Optional manual: OpenChamber desktop app as a client only
+#    - set OPENCHAMBER_SKIP_LOCAL_SERVER=1 (user env var)
+#    - add http://localhost:7777 to the desktop app's host list
 
 # 5. Confirm everything is as intended
 install/scripts/dev-stack.ps1 status

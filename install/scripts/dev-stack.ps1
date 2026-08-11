@@ -484,6 +484,36 @@ function Collect-Status {
   $ocPwd = [Environment]::GetEnvironmentVariable("OPENCHAMBER_UI_PASSWORD", "User")
   Add-Check "OpenChamber" "UI password set" (-not [string]::IsNullOrEmpty($ocPwd)) $(if ($ocPwd) { "OPENCHAMBER_UI_PASSWORD set (env)" } else { "OPENCHAMBER_UI_PASSWORD not set - UI exposed without auth" })
 
+  # openchamber desktop app: report install + version alongside the CLI,
+  # advisory only for OPENCHAMBER_SKIP_LOCAL_SERVER (never auto-corrected)
+  $ocDesktopExe = Join-Path $env:LOCALAPPDATA "Programs\@openchamberelectron\OpenChamber.exe"
+  $ocDesktopInstalled = Test-Path -LiteralPath $ocDesktopExe
+  if ($ocDesktopInstalled) {
+    $ocDesktopVer = Get-FileVersion -Path $ocDesktopExe
+    if ($ocDesktopVer) {
+      Add-Check "OpenChamber" "Desktop version" $true $ocDesktopVer
+      if ($latest.openchamber) {
+        if (Test-VersionOutdated -Installed $ocDesktopVer -Latest $latest.openchamber) {
+          Add-Check "OpenChamber" "Desktop up to date" $false "installed $ocDesktopVer, latest $($latest.openchamber)"
+        } else {
+          Add-Check "OpenChamber" "Desktop up to date" $true "latest $($latest.openchamber)"
+        }
+      }
+    } else {
+      Add-Check "OpenChamber" "Desktop version" $false "exe present but version could not be read"
+    }
+  } else {
+    Add-Check "OpenChamber" "Desktop version" $true "not installed"
+  }
+  $ocSkipLocal = [Environment]::GetEnvironmentVariable("OPENCHAMBER_SKIP_LOCAL_SERVER", "User")
+  if (-not $ocDesktopInstalled) {
+    Add-Check "OpenChamber" "Desktop app (no built-in server)" $true "not installed - CLI server is the only server"
+  } elseif ("$ocSkipLocal" -eq "1") {
+    Add-Check "OpenChamber" "Desktop app (no built-in server)" $true "OPENCHAMBER_SKIP_LOCAL_SERVER=1 (connects to CLI server)"
+  } else {
+    Add-Warn "OpenChamber" "Desktop app (no built-in server)" "OPENCHAMBER_SKIP_LOCAL_SERVER is not set to 1 - set it and add http://localhost:$OpenChamberPort to the desktop app's host list to avoid two servers (desktop + headless CLI)"
+  }
+
   $firewall7777 = Get-FirewallAllow -Port $OpenChamberPort
   if ($null -eq $firewall7777) {
     Add-Warn "OpenChamber" "Firewall allows 7777" "could not determine (run elevated to check)"
@@ -654,6 +684,19 @@ function Invoke-Ensure {
   if ([string]::IsNullOrEmpty($ocPwdEnv) -and [string]::IsNullOrEmpty($ocPwdSettings)) {
     Write-Host "OpenChamber has no UI password yet - set one manually (UI is exposed without auth on 0.0.0.0):" -ForegroundColor Yellow
     Write-Host "  [Environment]::SetEnvironmentVariable('OPENCHAMBER_UI_PASSWORD', 'yourpassword', 'User')" -ForegroundColor Cyan
+  }
+  # openchamber desktop app: advisory only - never modify the desktop app's
+  # own settings/host list. If it isn't set to skip its local server, warn
+  # so the user can point it at the CLI server manually (two servers must
+  # not run side by side).
+  $ocDesktopExe = Join-Path $env:LOCALAPPDATA "Programs\@openchamberelectron\OpenChamber.exe"
+  if (Test-Path -LiteralPath $ocDesktopExe) {
+    $ocSkipLocal = [Environment]::GetEnvironmentVariable("OPENCHAMBER_SKIP_LOCAL_SERVER", "User")
+    if ("$ocSkipLocal" -ne "1") {
+      Write-Host "OpenChamber desktop is installed but may run its own local server." -ForegroundColor Yellow
+      Write-Host "Recommendation: set OPENCHAMBER_SKIP_LOCAL_SERVER=1 and add http://localhost:$OpenChamberPort to the desktop app's host list so it connects to the CLI server instead:" -ForegroundColor Yellow
+      Write-Host "  [Environment]::SetEnvironmentVariable('OPENCHAMBER_SKIP_LOCAL_SERVER', '1', 'User')" -ForegroundColor Cyan
+    }
   }
   } # end: openchamber ensure
 

@@ -147,6 +147,33 @@ change must be done by you in the desktop app. The reason: if the desktop app
 manages its own daemon while the headless CLI daemon is also running, two
 daemons run side by side, which is exactly what we want to avoid.
 
+## OpenChamber desktop app (optional, manual)
+
+Same principle: **one server, the CLI one.** The OpenChamber desktop app
+(Electron, installed at `%LOCALAPPDATA%\Programs\@openchamberelectron\`) can
+run its own in-process web server by default — point it at the CLI server
+instead:
+
+1. Install the headless CLI first (covered by `install`).
+2. Install the OpenChamber desktop app manually.
+3. Set `OPENCHAMBER_SKIP_LOCAL_SERVER=1` (user env var) so the desktop app
+   skips its in-process server entirely:
+   ```powershell
+   [Environment]::SetEnvironmentVariable("OPENCHAMBER_SKIP_LOCAL_SERVER", "1", "User")
+   ```
+4. In the desktop app, add `http://localhost:7777` (or the machine's LAN
+   address) to its host/server list so it has a remote instance to connect to.
+
+**This is advisory-only.** The script never modifies the desktop app's own
+settings or host list (there is no simple JSON file for it — the host list
+lives in the app's Electron storage). `status` flags it with a WARN if
+`OPENCHAMBER_SKIP_LOCAL_SERVER` is not `1` while the desktop app is installed
+(so the exit code stays 0), and `install`/`fix` print the manual instruction —
+step 4 (adding the host) must be done by you in the desktop app's UI. The
+reason: if the desktop app runs its own local server while the headless CLI
+server is also running, two servers run side by side, which is exactly what
+we want to avoid.
+
 ## What `status` checks
 
 Per tool: CLI present on PATH, CLI resolves from npm (not a desktop app), the
@@ -185,6 +212,10 @@ Additional checks:
 - Paseo desktop app (if installed): `manageBuiltInDaemon` must be `false` in
   `%APPDATA%\Paseo\desktop-settings.json` so the CLI daemon stays the only one.
   Flagged as a WARN only — the script never edits the desktop app's settings.
+- OpenChamber desktop app (if installed): `OPENCHAMBER_SKIP_LOCAL_SERVER` user
+  env var must be `1` so the CLI server stays the only one. Also reports the
+  desktop app's own version vs. latest. Flagged as a WARN only — the script
+  never edits the desktop app's settings/host list.
 - Windows Firewall inbound allow for TCP 6767/7777 — reported as a WARN when
   it can't be determined (firewall cmdlets need elevation); run the script
   from an elevated prompt to get a definitive answer.
