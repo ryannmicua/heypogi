@@ -17,6 +17,10 @@ if ($Help) {
   Write-Host "available in PowerShell profiles too (for shells that don't inherit a"
   Write-Host "fresh registry read, e.g. IntelliJ terminals)."
   Write-Host ""
+  Write-Host "Also adds tooling/bin to the user PATH, so scripts wrapped there"
+  Write-Host "(e.g. dev-stack) can be run by name from any shell, without typing"
+  Write-Host "the tooling/ path or the .ps1 extension."
+  Write-Host ""
   Write-Host "Flags:"
   Write-Host "  -Quiet     Overwrite an existing differing value without asking."
   Write-Host "  -Help, -h  Show this message."
@@ -60,8 +64,27 @@ function Set-EnvVar {
   }
 }
 
+function Add-UserPathEntry {
+  param([string]$Entry)
+  $current = [Environment]::GetEnvironmentVariable("Path", "User")
+  $parts = @()
+  if ($current) { $parts = $current -split ";" | Where-Object { $_ -ne "" } }
+  if ($parts -contains $Entry) {
+    if (-not $Quiet) {
+      Write-Host "User PATH already contains $Entry." -ForegroundColor Green
+    }
+    return
+  }
+  $newPath = if ($current) { "$current;$Entry" } else { $Entry }
+  [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+  if (-not $Quiet) {
+    Write-Host "Added $Entry to user PATH." -ForegroundColor Green
+  }
+}
+
 Set-EnvVar -Name "HEYPOGI_ROOT" -Value $repoRoot
 Set-EnvVar -Name "OPENCODE_CONFIG_DIR" -Value $configDir
+Add-UserPathEntry -Entry (Join-Path ($repoRoot -replace '/', '\') "tooling\bin")
 
 & "$PSScriptRoot\write-profile.ps1"
 
