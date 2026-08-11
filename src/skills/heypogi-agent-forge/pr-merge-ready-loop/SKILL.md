@@ -103,7 +103,7 @@ Rules: the judge writes exactly one round entry per assessment; `fixes_verified`
 
 ## Hard rules
 
-1. **The judge never mutates.** No edits, commits, pushes, reviewer requests, thread operations, CI reruns. It decides; the babysitter executes. (This includes Copilot review requests: judge decides `request_copilot_round`, babysitter runs `gh pr edit <N> --add-reviewer "@copilot"`.)
+1. **The judge never mutates.** No edits, commits, pushes, reviewer requests, thread operations, CI reruns. It decides; the babysitter executes. (This includes Copilot review requests: judge decides `request_copilot_round`, babysitter runs `gh pr edit <N> --add-reviewer "@copilot"` and **verifies the request landed** — Copilot is a Bot, so a silent no-op is possible if the plan/CLI is wrong; confirm via GraphQL that `copilot-pull-request-reviewer` is in `reviewRequests` per request-copilot-code-review before waiting on the review.)
 2. **The loop never merges.** Terminal states are `ready-to-merge` (returned to caller) and `needs-human` (surfaced). Merge is the operator's call.
 3. **Cross-family judge.** The judge must be a different model family from the fixer. Same-family judges reproduce the fixer's blind spots — the entire point is independent assessment.
 4. **Current-head reviews only.** A review of an old head does not count toward readiness condition 1. Code changed since the last review ⇒ request a new Copilot round before any ready verdict.
