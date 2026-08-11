@@ -18,7 +18,7 @@ Explain why: Codex and OpenCode discover user skills from `~/.agents/skills`, so
 2. If destination folder exists, run the installer script from the repo root:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File install/scripts/install-ce-skills.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File tooling/scripts/install-ce-skills.ps1
 ```
 
 3. If destination folder does not exist:
@@ -26,7 +26,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install/scripts/install-ce-s
    - If approved, run:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File install/scripts/install-ce-skills.ps1 -CreateDest
+powershell -NoProfile -ExecutionPolicy Bypass -File tooling/scripts/install-ce-skills.ps1 -CreateDest
 ```
 
 ### Linux/macOS
@@ -34,7 +34,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install/scripts/install-ce-s
 If destination folder exists, run:
 
 ```bash
-bash install/scripts/install-ce-skills.sh
+bash tooling/scripts/install-ce-skills.sh
 ```
 
 If destination folder does not exist:
@@ -43,7 +43,7 @@ If destination folder does not exist:
 - If approved, run:
 
 ```bash
-bash install/scripts/install-ce-skills.sh --create-dest
+bash tooling/scripts/install-ce-skills.sh --create-dest
 ```
 
 ## Notes

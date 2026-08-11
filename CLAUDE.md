@@ -19,14 +19,14 @@ Markdown/JSON assets or PowerShell install scripts.
   - `src/agents/`, `src/prompts/`, `src/templates/`, `src/plugins/`, `src/tools/`
 - `docs/` — project-management artifacts for this repo, treated as a single
   project (see "Document control" below).
-- `install/` — setup docs (`*.md`) paired with PowerShell scripts
-  (`install/scripts/*.ps1`) that install/verify the Dev Stack.
+- `tooling/` — setup docs (`*.md`) paired with PowerShell scripts
+  (`tooling/scripts/*.ps1`) that install/verify the Dev Stack.
 - `dotfiles/` — machine-level config synced into tool config dirs, notably
   `dotfiles/opencode/` (OpenCode config: `opencode.json`, `agents/`,
   `commands/`) and `dotfiles/paseo/` (Paseo config).
 - `external/` — cloned source repos (OpenCode, compound-engineering,
   compound-knowledge) used as reference material by subagents; not edited
-  directly, refreshed via `install/clone-*.ps1` scripts.
+  directly, refreshed via `tooling/clone-*.ps1` scripts.
 - `CONCEPTS.md` — shared domain vocabulary (glossary), accreted by
   `ce-compound` / `ce-compound-refresh`. Read this to understand
   project-specific terms like "Dev Stack," "Supervisor," "Intended State,"
@@ -42,23 +42,23 @@ port 7777), **Paseo** (headless agent daemon + web UI, port 6767). The
 single entry point for installing/verifying/repairing all three is:
 
 ```powershell
-install/scripts/check-dev-stack.ps1 status   # read-only check (default)
-install/scripts/check-dev-stack.ps1 install  # install/update + verify (idempotent)
-install/scripts/check-dev-stack.ps1 fix      # repair stopped daemons/autostart/config
-install/scripts/check-dev-stack.ps1 start|stop
+tooling/scripts/check-dev-stack.ps1 status   # read-only check (default)
+tooling/scripts/check-dev-stack.ps1 install  # install/update + verify (idempotent)
+tooling/scripts/check-dev-stack.ps1 fix      # repair stopped daemons/autostart/config
+tooling/scripts/check-dev-stack.ps1 start|stop
 ```
 
-Full behavior and every check performed: `install/check-dev-stack.md`. Don't
+Full behavior and every check performed: `tooling/check-dev-stack.md`. Don't
 manage these tools ad hoc (e.g. hand-editing autostart registrations) —
 route changes through this script or its underlying scripts in
-`install/scripts/`. `status` checks the installed vs. latest npm version of
+`tooling/scripts/`. `status` checks the installed vs. latest npm version of
 only these three packages (`opencode-ai`, `@openchamber/web`,
 `@getpaseo/cli`), not every globally installed package; `-Quiet` skips those
 npm registry lookups and only checks local runtime state.
 
 ## Environment
 
-- `HEYPOGI_ROOT` — repo root, set by `install/scripts/setup-environment.ps1`.
+- `HEYPOGI_ROOT` — repo root, set by `tooling/scripts/setup-environment.ps1`.
 - `OPENCODE_CONFIG_DIR` — points at `dotfiles/opencode`, so OpenCode reads
   its config from this repo rather than the default user config dir.
 - Shell is PowerShell 7+ on Windows; install scripts are `.ps1` (some have
@@ -99,5 +99,5 @@ npm registry lookups and only checks local runtime state.
   mix the two.
 - External repo freshness (whether `external/*` clones are stale) can be
   checked without contacting remotes via
-  `install/scripts/get-external-repo-status.ps1` (default window: 7 days,
+  `tooling/scripts/get-external-repo-status.ps1` (default window: 7 days,
   override with `-MaxAgeDays`; exits 1 if anything is due for a check).

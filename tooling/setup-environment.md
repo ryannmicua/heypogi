@@ -8,13 +8,13 @@ and PowerShell profile, and points OpenCode at this repo's config directory.
 Run from the repo root:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File install/scripts/setup-environment.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File tooling/scripts/setup-environment.ps1
 ```
 
 To suppress prompts (e.g. for scripting):
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File install/scripts/setup-environment.ps1 -Quiet
+powershell -NoProfile -ExecutionPolicy Bypass -File tooling/scripts/setup-environment.ps1 -Quiet
 ```
 
 ## What it sets

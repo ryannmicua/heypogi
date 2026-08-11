@@ -4,21 +4,21 @@
 
 ## First-time setup
 
-1. **[`install/setup-environment.md`](install/setup-environment.md)** — sets `HEYPOGI_ROOT` and `OPENCODE_CONFIG_DIR`, writes PowerShell profile
-2. **[`install/clone-opencode-source.md`](install/clone-opencode-source.md)** — clones OpenCode source for the `@opencode` subagent
-3. **[`install/install-skills.md`](install/install-skills.md)** — installs local skills into your agent environment
+1. **[`tooling/setup-environment.md`](tooling/setup-environment.md)** — sets `HEYPOGI_ROOT` and `OPENCODE_CONFIG_DIR`, writes PowerShell profile
+2. **[`tooling/clone-opencode-source.md`](tooling/clone-opencode-source.md)** — clones OpenCode source for the `@opencode` subagent
+3. **[`tooling/install-skills.md`](tooling/install-skills.md)** — installs local skills into your agent environment
 
 ## Plugin setup
 
 ### Compound Engineering
 
-1. **[`install/clone-ce-source.md`](install/clone-ce-source.md)** — clones Compound Engineering source for the skills installer
-2. **[`install/install-ce-skills.md`](install/install-ce-skills.md)** — installs Compound Engineering plugin skills into your agent environment
+1. **[`tooling/clone-ce-source.md`](tooling/clone-ce-source.md)** — clones Compound Engineering source for the skills installer
+2. **[`tooling/install-ce-skills.md`](tooling/install-ce-skills.md)** — installs Compound Engineering plugin skills into your agent environment
 
 ### Compound Knowledge
 
-1. **[`install/clone-knowledge-source.md`](install/clone-knowledge-source.md)** — clones Compound Knowledge source for the skills installer
-2. **[`install/install-knowledge-skills.md`](install/install-knowledge-skills.md)** — installs Compound Knowledge plugin skills into your agent environment
+1. **[`tooling/clone-knowledge-source.md`](tooling/clone-knowledge-source.md)** — clones Compound Knowledge source for the skills installer
+2. **[`tooling/install-knowledge-skills.md`](tooling/install-knowledge-skills.md)** — installs Compound Knowledge plugin skills into your agent environment
 
 Restart your terminal after step 1 (or reload your profile with `. $PROFILE`).
 
@@ -68,7 +68,7 @@ The external source clones record their most recent successful clone or pull in 
 ignored local ledger. Check whether an update is due without contacting remotes:
 
 ```powershell
-& ".\install\scripts\get-external-repo-status.ps1"
+& ".\tooling\scripts\get-external-repo-status.ps1"
 ```
 
 The default freshness window is seven days. Override it when needed with

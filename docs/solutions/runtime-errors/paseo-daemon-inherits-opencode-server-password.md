@@ -2,7 +2,7 @@
 title: "Paseo daemon inherits OPENCODE_SERVER_PASSWORD and every spawned opencode server 401s"
 date: 2026-08-05
 category: runtime-errors
-module: "install/scripts (Paseo daemon lifecycle)"
+module: "tooling/scripts (Paseo daemon lifecycle)"
 problem_type: runtime_error
 component: authentication
 symptoms:
@@ -63,11 +63,11 @@ curl.exe -s -u opencode:<password> http://127.0.0.1:<port>/config/providers   # 
 env -u OPENCODE_SERVER_PASSWORD opencode serve                                # then curl -> 200, unauthenticated
 ```
 
-Finally, provenance. The variable was present in the live process environment but in **neither** the User nor the Machine registry scope, so it was pure process inheritance, not a persisted setting. The process tree showed opencode PID 8408 under `@openchamber/web` PID 18636 (port 7777), and the paseo daemon-worker PID 15088 under supervisor 18696 under PID 28280 — which had already exited, so the launcher could not be identified directly. Timestamps settled it: last boot/logon was Jul 27 16:19, when the `PaseoDaemon` scheduled task ran with result 0; OpenChamber started Aug 5 15:29; the running Paseo supervisor started Aug 5 17:43:42. Nine days after logon and two hours after OpenChamber — so the live daemon did not come from the clean-env scheduled task. `install/scripts/dev-stack.ps1` had been modified at 17:32, eleven minutes earlier, and that script starts the daemon in-process with `& paseo daemon start`.
+Finally, provenance. The variable was present in the live process environment but in **neither** the User nor the Machine registry scope, so it was pure process inheritance, not a persisted setting. The process tree showed opencode PID 8408 under `@openchamber/web` PID 18636 (port 7777), and the paseo daemon-worker PID 15088 under supervisor 18696 under PID 28280 — which had already exited, so the launcher could not be identified directly. Timestamps settled it: last boot/logon was Jul 27 16:19, when the `PaseoDaemon` scheduled task ran with result 0; OpenChamber started Aug 5 15:29; the running Paseo supervisor started Aug 5 17:43:42. Nine days after logon and two hours after OpenChamber — so the live daemon did not come from the clean-env scheduled task. `tooling/scripts/dev-stack.ps1` had been modified at 17:32, eleven minutes earlier, and that script starts the daemon in-process with `& paseo daemon start`.
 
 ## Solution
 
-The fix shipped in commit `ee86c9c` (*fix: strip session env vars when starting Paseo daemon*). It adds an `Invoke-PaseoDaemon` helper to `install/scripts/dev-stack.ps1` and routes every daemon-spawning call site through it.
+The fix shipped in commit `ee86c9c` (*fix: strip session env vars when starting Paseo daemon*). It adds an `Invoke-PaseoDaemon` helper to `tooling/scripts/dev-stack.ps1` and routes every daemon-spawning call site through it.
 
 Before — each of the four spawn sites invoked the daemon directly, inheriting whatever environment the script happened to be running under:
 
@@ -76,7 +76,7 @@ Safe-Invoke -What "Starting Paseo daemon"   -Body { & paseo daemon start }
 Safe-Invoke -What "Restarting Paseo daemon" -Body { & paseo daemon restart }
 ```
 
-After — the helper in `install/scripts/dev-stack.ps1`:
+After — the helper in `tooling/scripts/dev-stack.ps1`:
 
 ```powershell
 function Invoke-PaseoDaemon {
@@ -145,7 +145,7 @@ JSON means healthy. A 401 means the bug is back. This is the one check that test
 
 ## Related Issues
 
-- [`install/paseo-headless-setup.md`](../../../install/paseo-headless-setup.md) — documents starting the daemon directly and registering the `PaseoDaemon` scheduled task, with no mention that the invoking shell's environment is captured permanently. Refresh candidate.
-- [`install/dev-stack.md`](../../../install/dev-stack.md) — reference for the supervisor's `start` / `install` / `fix` commands, which are the code paths patched here. Does not yet document the env-stripping behavior. Refresh candidate.
+- [`tooling/paseo-headless-setup.md`](../../../tooling/paseo-headless-setup.md) — documents starting the daemon directly and registering the `PaseoDaemon` scheduled task, with no mention that the invoking shell's environment is captured permanently. Refresh candidate.
+- [`tooling/dev-stack.md`](../../../tooling/dev-stack.md) — reference for the supervisor's `start` / `install` / `fix` commands, which are the code paths patched here. Does not yet document the env-stripping behavior. Refresh candidate.
 - [`docs/plans/2026-07-28-001-feat-paseo-plan-execution-supervisor-plan.md`](../../plans/2026-07-28-001-feat-paseo-plan-execution-supervisor-plan.md) — adjacent concern: scrubbing supervisor/operator secrets from a Paseo-delegated worker's environment. Same theme of env hygiene around Paseo-spawned processes, different mechanism and direction.
 - `docs/open_items_register.md` — OIR-001 tracks Paseo worker sandboxing/env scrubbing risk.

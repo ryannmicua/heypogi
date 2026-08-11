@@ -29,7 +29,7 @@ The intended state, verified by `dev-stack.ps1`:
 # 1. Prerequisite: Node.js (https://nodejs.org) - required by npm
 
 # 2. One command: installs all three tools + configures autostarts + verifies
-install/scripts/dev-stack.ps1 install
+tooling/scripts/dev-stack.ps1 install
 
 # 3. Manual: set the two UI passwords (interactive, cannot be automated;
 #    the script prints reminders when they are missing)
@@ -47,10 +47,10 @@ paseo daemon set-password
 #    - add http://localhost:7777 to the desktop app's host list
 
 # 5. Confirm everything is as intended
-install/scripts/dev-stack.ps1 status
+tooling/scripts/dev-stack.ps1 status
 ```
 
-## Supervisor — `install/scripts/dev-stack.ps1`
+## Supervisor — `tooling/scripts/dev-stack.ps1`
 
 One entry point for the whole stack. Full reference:
 [`dev-stack.md`](dev-stack.md).
@@ -76,7 +76,7 @@ Every check it performs, plus autostart/health details:
 
 | File | Created by | Intended values |
 |------|-----------|-----------------|
-| `~/.config/openchamber/settings.json` | Repo template `install/openchamber.settings.json` via `openchamber-ctl.ps1 configure` (or the OpenChamber app itself) | `port: 7777`, `host: 0.0.0.0`, `autoStart: true` (defaults applied by the script when keys are absent) |
+| `~/.config/openchamber/settings.json` | Repo template `tooling/openchamber.settings.json` via `openchamber-ctl.ps1 configure` (or the OpenChamber app itself) | `port: 7777`, `host: 0.0.0.0`, `autoStart: true` (defaults applied by the script when keys are absent) |
 | `~/.paseo/config.json` | Paseo itself on first load (default is localhost-only) | `daemon.listen: "0.0.0.0:6767"`, `features.webUi.enabled: true`, `daemon.auth.password` (bcrypt) |
 | `%APPDATA%\Paseo\desktop-settings.json` | Paseo desktop app | `settings.daemon.manageBuiltInDaemon: false` — **advisory only**, never modified by the scripts |
 | `~/.config/openchamber/startup.ps1` + `launch.vbs` | `openchamber-ctl.ps1 configure` | Launch the OpenChamber server hidden at login (wrappers used by the Run key) |

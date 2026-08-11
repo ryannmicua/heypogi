@@ -11,7 +11,7 @@ Adds passive session observation and correction detection to OpenCode.
 
 ```powershell
 # From repo root
-./src/plugins/opencode-learn/install/install.ps1
+./src/plugins/opencode-learn/tooling/install.ps1
 ```
 
 This registers the plugin in `~/.config/opencode/opencode.json` so it loads in every session.

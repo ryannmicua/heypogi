@@ -5,10 +5,10 @@ create_dest=0
 
 usage() {
   cat <<'EOF'
-Install Compound Engineering plugin skills by linking the repo external folder into ~/.agents/skills/compound-engineering.
+Install Compound Knowledge plugin skills by linking the repo's plugin skills folder into ~/.agents/skills/compound-knowledge.
 
 Usage:
-  bash install/scripts/install-ce-skills.sh [--create-dest]
+  bash tooling/scripts/install-knowledge-skills.sh [--create-dest]
 
 Options:
   --create-dest  Create ~/.agents/skills if missing (only after user approval)
@@ -25,12 +25,12 @@ done
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd "${script_dir}/../.." && pwd -P)"
-skills_root="$(cd "${repo_root}/external/compound-engineering/skills" && pwd -P)"
+skills_root="$(cd "${repo_root}/external/compound-knowledge/plugins/compound-knowledge/skills" && pwd -P)"
 dest_dir="${HOME}/.agents/skills"
-dest_path="${dest_dir}/compound-engineering"
+dest_path="${dest_dir}/compound-knowledge"
 
 if [[ ! -d "${skills_root}" ]]; then
-  echo "Could not find CE plugin skills folder at: ${skills_root}" >&2
+  echo "Could not find CK plugin skills folder at: ${skills_root}" >&2
   exit 1
 fi
 

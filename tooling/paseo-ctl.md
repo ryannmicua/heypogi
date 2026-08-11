@@ -10,7 +10,7 @@ then restarts it afterward.
 ## Usage
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File install/scripts/paseo-ctl.ps1 [command]
+powershell -NoProfile -ExecutionPolicy Bypass -File tooling/scripts/paseo-ctl.ps1 [command]
 ```
 
 | Command | What it does |
@@ -26,7 +26,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install/scripts/paseo-ctl.ps
 ## Install / update (fresh machine or upgrade)
 
 ```powershell
-install/scripts/paseo-ctl.ps1 install
+tooling/scripts/paseo-ctl.ps1 install
 ```
 
 Detects the current version and upgrades if a newer one is available. If the
@@ -42,7 +42,7 @@ running; otherwise skips the stop and warns that it must be stopped manually
 before upgrading:
 
 ```powershell
-install/scripts/paseo-ctl.ps1 install -Quiet
+tooling/scripts/paseo-ctl.ps1 install -Quiet
 ```
 
 ## Stable vs beta
@@ -59,7 +59,7 @@ versions are printed before installing.
 ## Uninstall
 
 ```powershell
-install/scripts/paseo-ctl.ps1 uninstall
+tooling/scripts/paseo-ctl.ps1 uninstall
 ```
 
 Stops the daemon, unregisters the `PaseoDaemon` scheduled task (requires an
@@ -69,7 +69,7 @@ default** — pass `-WipeConfig` to also delete it; this always asks for
 confirmation unless `-Force` is given too.
 
 ```powershell
-install/scripts/paseo-ctl.ps1 uninstall -WipeConfig
+tooling/scripts/paseo-ctl.ps1 uninstall -WipeConfig
 ```
 
 ## Prerequisites

@@ -20,7 +20,7 @@ All three are installed as npm CLIs. The script has a strict separation:
 ## Usage
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File install/scripts/dev-stack.ps1 [command]
+powershell -NoProfile -ExecutionPolicy Bypass -File tooling/scripts/dev-stack.ps1 [command]
 ```
 
 | Command | What it does |
@@ -55,7 +55,7 @@ action (stopping daemons, editing config files) unless `-Force` is given.
 ## `startup` - per-app autostart management
 
 ```powershell
-install/scripts/dev-stack.ps1 startup <enable|disable|install|uninstall> [-App <app>]
+tooling/scripts/dev-stack.ps1 startup <enable|disable|install|uninstall> [-App <app>]
 ```
 
 Valid apps: `opencode`, `openchamber`, `paseo` (alias `paseo-cli`), `all`.
@@ -70,10 +70,10 @@ Valid apps: `opencode`, `openchamber`, `paseo` (alias `paseo-cli`), `all`.
 Examples:
 
 ```powershell
-install/scripts/dev-stack.ps1 startup enable -App opencode
-install/scripts/dev-stack.ps1 startup install -App all
-install/scripts/dev-stack.ps1 startup uninstall -App paseo-cli
-install/scripts/dev-stack.ps1 startup disable   # all apps
+tooling/scripts/dev-stack.ps1 startup enable -App opencode
+tooling/scripts/dev-stack.ps1 startup install -App all
+tooling/scripts/dev-stack.ps1 startup uninstall -App paseo-cli
+tooling/scripts/dev-stack.ps1 startup disable   # all apps
 ```
 
 OpenCode has no autostart mechanism of its own - it runs as an OpenChamber
@@ -85,7 +85,7 @@ run from an Admin PowerShell if you hit "Access is denied".
 ## `uninstall` - full lifecycle teardown
 
 ```powershell
-install/scripts/dev-stack.ps1 uninstall -App <opencode|openchamber|paseo|all> [-WipeConfig]
+tooling/scripts/dev-stack.ps1 uninstall -App <opencode|openchamber|paseo|all> [-WipeConfig]
 ```
 
 Unlike `startup uninstall` (which only removes the autostart registration),
@@ -106,9 +106,9 @@ script always asks for confirmation before wiping config, even with
 `-WipeConfig`, unless `-Force` is given too.
 
 ```powershell
-install/scripts/dev-stack.ps1 uninstall -App paseo-cli              # keeps ~/.paseo
-install/scripts/dev-stack.ps1 uninstall -App opencode -WipeConfig   # prompts, then wipes config too
-install/scripts/dev-stack.ps1 uninstall -App all -WipeConfig -Force # full wipe, no prompts
+tooling/scripts/dev-stack.ps1 uninstall -App paseo-cli              # keeps ~/.paseo
+tooling/scripts/dev-stack.ps1 uninstall -App opencode -WipeConfig   # prompts, then wipes config too
+tooling/scripts/dev-stack.ps1 uninstall -App all -WipeConfig -Force # full wipe, no prompts
 ```
 
 ## Fresh machine workflow
@@ -117,7 +117,7 @@ install/scripts/dev-stack.ps1 uninstall -App all -WipeConfig -Force # full wipe,
 # 1. Install Node.js first (https://nodejs.org) - required by npm
 
 # 2. One command: installs everything + configures autostarts + verifies
-install/scripts/dev-stack.ps1 install
+tooling/scripts/dev-stack.ps1 install
 
 # 3. Only manual step: set the two UI passwords (interactive, cannot be
 #    automated - the script prints reminders when they are missing)
@@ -125,7 +125,7 @@ paseo daemon set-password
 [Environment]::SetEnvironmentVariable("OPENCHAMBER_UI_PASSWORD", "yourpassword", "User")
 
 # 4. Confirm everything is as intended
-install/scripts/dev-stack.ps1 status
+tooling/scripts/dev-stack.ps1 status
 ```
 
 ## Paseo desktop app (optional, manual)

@@ -22,7 +22,7 @@ You are a subject matter expert on **Compound Engineering (CE)** by Every — an
 
 ## Sources of truth
 
-1. **Local clone (`external/compound-engineering/`)** — the most authoritative source for *current* behavior. The clone root contains `skills/`, `src/`, `docs/`, `CONCEPTS.md`, `AGENTS.md`, `README.md`, and per-harness manifests (`.claude-plugin/`, `.codex-plugin/`, `.cursor-plugin/`, `.grok-plugin/`, `.kimi-plugin/`, `.devin-plugin/`, `.opencode/`, `.cline/`, `.pi/`). There is **no** `plugins/compound-engineering/` subdir — read `skills/<name>/SKILL.md` directly. (Install/clone via `install/scripts/clone-ce-source.ps1`.)
+1. **Local clone (`external/compound-engineering/`)** — the most authoritative source for *current* behavior. The clone root contains `skills/`, `src/`, `docs/`, `CONCEPTS.md`, `AGENTS.md`, `README.md`, and per-harness manifests (`.claude-plugin/`, `.codex-plugin/`, `.cursor-plugin/`, `.grok-plugin/`, `.kimi-plugin/`, `.devin-plugin/`, `.opencode/`, `.cline/`, `.pi/`). There is **no** `plugins/compound-engineering/` subdir — read `skills/<name>/SKILL.md` directly. (Install/clone via `tooling/scripts/clone-ce-source.ps1`.)
 2. **Training data** — your built-in knowledge of CE. Use for orientation; confirm specifics against the clone.
 3. **`webfetch` from every.to and GitHub** — verify against <https://every.to/guides/compound-engineering> for the philosophy and <https://github.com/EveryInc/compound-engineering-plugin> for the README, install docs, and component reference when answering config/workflow/architecture questions.
 4. **`webfetch` from npm** — <https://www.npmjs.com/package/@every-env/compound-plugin> for the published CLI package.

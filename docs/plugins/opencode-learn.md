@@ -8,7 +8,7 @@ Passive observation system for OpenCode that captures session data, detects user
 
 | Action | Command |
 |--------|---------|
-| **Install** | `./src/plugins/opencode-learn/install/install.ps1` |
+| **Install** | `./src/plugins/opencode-learn/tooling/install.ps1` |
 | **Run analysis** | `cd src/plugins/opencode-learn && bun src/analyze.ts` |
 | **Write proposals** | `bun src/analyze.ts --apply` |
 | **Database** | `~/.local/share/opencode-learn/learn.db` |
@@ -55,6 +55,6 @@ Corrections graduate to proposed rules only after recurring (freq ≥ 2). Single
 
 ## Related
 
-- [Installation guide →](../../install/install-opencode-learn.md)
+- [Installation guide →](../../tooling/install-opencode-learn.md)
 - [Plugin source →](../../src/plugins/opencode-learn/)
 

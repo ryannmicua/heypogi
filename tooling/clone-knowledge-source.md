@@ -11,20 +11,20 @@ Clones the [Compound Knowledge](https://github.com/EveryInc/compound-knowledge-p
 
 1. Clones `https://github.com/EveryInc/compound-knowledge-plugin.git` into `external/compound-knowledge/`
    (or pulls latest if already cloned)
-2. Keeps the local source checkout available for the skills installer at `install/install-knowledge-skills.md`
+2. Keeps the local source checkout available for the skills installer at `tooling/install-knowledge-skills.md`
 
 ## Install
 
 Run from the repo root:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File install/scripts/clone-knowledge-source.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File tooling/scripts/clone-knowledge-source.ps1
 ```
 
 To suppress prompts (e.g. for scripting):
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File install/scripts/clone-knowledge-source.ps1 -Quiet
+powershell -NoProfile -ExecutionPolicy Bypass -File tooling/scripts/clone-knowledge-source.ps1 -Quiet
 ```
 
 ### Linux/macOS
@@ -32,13 +32,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install/scripts/clone-knowle
 Run from the repo root:
 
 ```bash
-bash install/scripts/clone-knowledge-source.sh
+bash tooling/scripts/clone-knowledge-source.sh
 ```
 
 To suppress prompts:
 
 ```bash
-bash install/scripts/clone-knowledge-source.sh --quiet
+bash tooling/scripts/clone-knowledge-source.sh --quiet
 ```
 
 ## Verify

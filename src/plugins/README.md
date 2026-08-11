@@ -12,7 +12,7 @@ Collects OpenCode EventV2 events (prompts, tool calls, steps, shell commands, ag
 
 ```powershell
 # Install the plugin globally
-./src/plugins/opencode-learn/install/install.ps1
+./src/plugins/opencode-learn/tooling/install.ps1
 
 # After a few sessions, run analysis
 cd src/plugins/opencode-learn && bun src/analyze.ts
