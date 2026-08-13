@@ -60,10 +60,19 @@ function Invoke-Install {
   }
 
   # ---------- detect current version ----------
+  # Wrapped in try/catch: if a previous install left the package's own
+  # postinstall-failure stub in place (a non-PE placeholder script, not a
+  # real binary), invoking it is a terminating native-command error under
+  # $ErrorActionPreference = "Stop" and would otherwise crash here before
+  # ever reaching the npm install + self-heal step below.
   $currentVersion = $null
   $currentPath = Get-Command "opencode" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
   if ($currentPath) {
-    $currentVersion = & "opencode" "--version" 2>$null
+    try {
+      $currentVersion = & "opencode" "--version" 2>$null
+    } catch {
+      $currentVersion = $null
+    }
     if (-not $currentVersion) { $currentVersion = $null }
   }
 
@@ -109,7 +118,11 @@ function Invoke-Install {
     }
   }
 
-  $newVersion = & "opencode" "--version" 2>$null
+  try {
+    $newVersion = & "opencode" "--version" 2>$null
+  } catch {
+    $newVersion = $null
+  }
   if (-not $newVersion) {
     Write-Host "Install succeeded but 'opencode --version' failed. Check your PATH." -ForegroundColor Yellow
     exit 1
