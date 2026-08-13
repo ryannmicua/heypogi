@@ -16,6 +16,24 @@ $PaseoTaskName = "PaseoDaemon"
 $PaseoPort = 6767
 
 # ---------- helpers ----------
+# npm's generated "paseo" shim is itself a PowerShell script (paseo.ps1), so
+# invoking it via & runs it as a nested script in this same session, which
+# inherits $ErrorActionPreference. Paseo spawns internal subprocesses using
+# Node's child_process shell option, which emits a DEP0190 deprecation
+# warning to stderr; under "Stop" that becomes a terminating error *inside*
+# the nested shim before it returns, which output redirection (2>$null,
+# *>$null) cannot suppress since it's a thrown exception, not stream text.
+# Route every paseo invocation through here so it runs with a locally
+# relaxed preference instead - same pattern already used for npm install
+# below.
+function Invoke-Paseo {
+  param([Parameter(ValueFromRemainingArguments)][string[]]$ArgList)
+  & {
+    $ErrorActionPreference = "Continue"
+    & "paseo" @ArgList 2>$null
+  }
+}
+
 function Read-Choice {
   param([string]$Prompt, [string[]]$ValidChoices)
   while ($true) {
@@ -112,7 +130,7 @@ function Invoke-PaseoDaemon {
     }
   }
   try {
-    & paseo daemon $Action
+    Invoke-Paseo "daemon" $Action
   } finally {
     foreach ($k in $saved.Keys) { Set-Item "Env:$k" $saved[$k] }
   }
@@ -139,7 +157,7 @@ function Invoke-Install {
   $currentVersion = $null
   $paseoCmd = Get-Command "paseo" -ErrorAction SilentlyContinue
   if ($paseoCmd) {
-    $currentVersion = & "paseo" "--version" 2>$null
+    $currentVersion = Invoke-Paseo "--version"
     if (-not $currentVersion) { $currentVersion = $null }
   }
 
@@ -149,14 +167,14 @@ function Invoke-Install {
   # any running agents, so we always ask first (unless -Quiet).
   $daemonRunning = $false
   if ($paseoCmd) {
-    & "paseo" "daemon" "status" *> $null
+    Invoke-Paseo "daemon" "status" | Out-Null
     $daemonRunning = ($LASTEXITCODE -eq 0)
   }
 
   $stopDaemon = $false
   if ($daemonRunning) {
     if ($Quiet) {
-      $agentCount = (& "paseo" "ls" 2>$null | Select-String -Pattern '^\S' | Measure-Object).Count
+      $agentCount = (Invoke-Paseo "ls" | Select-String -Pattern '^\S' | Measure-Object).Count
       if ($agentCount -gt 0) {
         Write-Host "Daemon is running with $agentCount agent(s). Skipping daemon stop; re-run without -Quiet or stop it manually ('paseo daemon stop') before upgrading." -ForegroundColor Yellow
       } else {
@@ -170,7 +188,7 @@ function Invoke-Install {
   }
 
   if ($stopDaemon) {
-    & "paseo" "daemon" "stop" *> $null
+    Invoke-Paseo "daemon" "stop" | Out-Null
     if ($LASTEXITCODE -ne 0) {
       Write-Host "Failed to stop the daemon. Stop it manually ('paseo daemon stop') and re-run." -ForegroundColor Red
       exit 1
@@ -216,7 +234,7 @@ function Invoke-Install {
   }
 
   # ---------- verify ----------
-  $newVersion = & "paseo" "--version" 2>$null
+  $newVersion = Invoke-Paseo "--version"
   if (-not $newVersion) {
     Write-Host "Install succeeded but 'paseo --version' failed. Check your PATH." -ForegroundColor Yellow
     exit 1
@@ -266,13 +284,13 @@ function Invoke-Start {
 
 function Invoke-Stop {
   Write-Host "Stopping Paseo daemon..." -ForegroundColor Cyan
-  & paseo daemon stop
+  Invoke-Paseo "daemon" "stop"
 }
 
 # ---------- status ----------
 function Invoke-Status {
   $cmd = Get-Command "paseo" -ErrorAction SilentlyContinue
-  $version = & "paseo" "--version" 2>$null
+  $version = if ($cmd) { Invoke-Paseo "--version" } else { $null }
 
   Write-Host "Paseo status" -ForegroundColor Green
   Write-Host "  CLI path        : $(if ($cmd) { $cmd.Source } else { 'NOT INSTALLED - run paseo-ctl.ps1 install' })"
@@ -307,7 +325,7 @@ function Invoke-Uninstall {
       $choice = Read-Choice -Prompt "Stop it and continue with uninstall? [Y]es, [N]o?" -ValidChoices @("Y", "N")
       if ($choice -eq "N") { exit 0 }
     }
-    & paseo daemon stop 2>&1 | Out-Null
+    Invoke-Paseo "daemon" "stop" | Out-Null
     Write-Host "Stopped the Paseo daemon." -ForegroundColor Cyan
   }
 
