@@ -24,6 +24,7 @@ Create a durable visual deliverable, then keep the chat handoff brief.
 4. Preserve information hierarchy: title and purpose, key takeaway, evidence or details, then implications or next actions.
 5. Add lightweight interaction only when it improves comprehension, such as filtering, tabs, disclosure controls, or diagram focus states.
 6. Make responsive behavior and print output usable.
+7. For workshops, handoffs, and other specialist materials, add a concise plain-language vocabulary when labels, abbreviations, phases, or evidence codes would be unclear to a new reader. Define the label at first use when practical and collect the full set in a linked reading guide near the end.
 
 ## Hard rules
 
@@ -48,6 +49,14 @@ Use the tokens in `assets/artifact-template.html` as the canonical defaults:
 
 Keep gold for emphasis and highlights rather than long text. Use blue for headings, links, controls, and data emphasis.
 
+### Avoid generic AI-report styling
+
+- Compose the page around the document's actual job and audience; do not apply a dashboard or card-grid pattern by default.
+- Use elevation, rounded surfaces, pills, badges, and accent color selectively. Repeating the same rounded card for every paragraph makes a document feel templated and obscures hierarchy.
+- Prefer an editorial rhythm: a purposeful hero, clear section dividers, varied but consistent content groupings, readable type scale, and sufficient quiet space.
+- Avoid decorative gradients, oversized motivational headlines, dense rows of status pills, and arbitrary visual flourishes unless they serve the content.
+- Make evidence status understandable. Use plain-language definitions for codes such as participant-reported, observed, open question, working assumption, or facilitator suggestion; never assume the reader attended the source session.
+
 ## Layout patterns
 
 - **Report:** executive summary, metric or finding cards, evidence sections, recommendations, sources or notes.
@@ -66,5 +75,7 @@ Combine patterns only when the content genuinely needs them.
 4. Exercise every control and confirm there are no console errors or network dependencies.
 5. Fix any rendering problem and repeat verification.
 6. Only then provide the file link and a one-sentence summary in chat.
+
+If the available preview surface blocks local files, do not claim visual browser validation. Complete static checks (document structure, anchor targets, and external dependencies), open the artifact in the workspace when possible, and state the limitation succinctly.
 
 Never declare an artifact complete based only on reading its source.
