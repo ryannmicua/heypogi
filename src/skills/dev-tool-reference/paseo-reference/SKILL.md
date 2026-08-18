@@ -357,3 +357,28 @@ login shell, then restart the daemon.
 - **Confusing paseo skills (orchestrator tools) with paseo itself.** The
   `paseo` skill teaches agents how to use paseo tools. This skill answers
   questions about paseo itself.
+- **Using `opencode-go` as a provider name.** `opencode-go` is a model ID
+  prefix within the `opencode` provider, not a provider itself. The correct
+  format for `paseo_create_agent` is `provider/model` where model can contain
+  slashes (e.g. `opencode/opencode-go/deepseek-v4-flash`). See
+  `~/.paseo/orchestration-preferences.json` → `role_models` for exact strings.
+
+## Provider/Model Format for Agent Creation
+
+When using `paseo_create_agent`, the `provider` parameter must be in
+`provider/model` format. The model ID can contain slashes.
+
+**Correct examples:**
+- `opencode/opencode-go/deepseek-v4-flash` (DeepSeek via OpenCode)
+- `opencode/opencode-go/minimax-m3` (MiniMax via OpenCode)
+- `opencode/openai/gpt-5.6-sol` (OpenAI via OpenCode)
+- `claude/claude-opus-5` (Claude native)
+- `codex/gpt-5.6-sol` (Codex native)
+
+**Incorrect:**
+- `opencode-go/minimax-m3` — `opencode-go` is not a configured provider
+- `minimax-m3` — missing provider prefix
+
+**Source of truth:** `~/.paseo/orchestration-preferences.json` → `role_models`
+section maps roles (impl, audit, planning, etc.) to exact provider/model
+strings. Always read this file before creating agents.
