@@ -360,7 +360,7 @@ login shell, then restart the daemon.
 - **Using `opencode-go` as a provider name.** `opencode-go` is a model ID
   prefix within the `opencode` provider, not a provider itself. The correct
   format for `paseo_create_agent` is `provider/model` where model can contain
-  slashes (e.g. `opencode/opencode-go/deepseek-v4-flash`). See
+  slashes (e.g. `opencode/opencode-go/mimo-v2.5`). See
   `~/.paseo/orchestration-preferences.json` → `role_models` for exact strings.
 
 ## Provider/Model Format for Agent Creation
@@ -369,11 +369,10 @@ When using `paseo_create_agent`, the `provider` parameter must be in
 `provider/model` format. The model ID can contain slashes.
 
 **Correct examples:**
-- `opencode/opencode-go/deepseek-v4-flash` (DeepSeek via OpenCode)
+- `opencode/opencode-go/mimo-v2.5` (MiMo via OpenCode)
 - `opencode/opencode-go/minimax-m3` (MiniMax via OpenCode)
-- `opencode/openai/gpt-5.6-sol` (OpenAI via OpenCode)
-- `claude/claude-opus-5` (Claude native)
 - `codex/gpt-5.6-sol` (Codex native)
+- `claude/claude-opus-5` (Claude native)
 
 **Incorrect:**
 - `opencode-go/minimax-m3` — `opencode-go` is not a configured provider

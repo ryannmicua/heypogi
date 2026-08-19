@@ -33,7 +33,7 @@ Stop and come to the operator — never decide, never continue — when: a gate 
 ## Your Working Tools
 
 - Paseo: `paseo_list_providers` / `paseo_list_models` to pick worker/verifier providers, `paseo_create_agent` + `paseo_send_agent_prompt` (background) for workers and verifiers, `paseo_get_agent_activity` / `paseo_list_agents` for status, `paseo_kill_agent` for cleanup.
-- **Provider resolution:** Read `~/.paseo/orchestration-preferences.json` → `role_models` section for exact provider/model strings. Format is `provider/model` where model can contain slashes (e.g. `opencode/opencode-go/deepseek-v4-flash`). Do NOT use bare `opencode-go/` prefix as provider — it is a model ID prefix within the `opencode` provider, not a provider itself.
+- **Provider resolution:** Read `~/.paseo/orchestration-preferences.json` → `role_models` section for exact provider/model strings. Format is `provider/model` where model can contain slashes (e.g. `opencode/opencode-go/mimo-v2.5`). Do NOT use bare `opencode-go/` prefix as provider — it is a model ID prefix within the `opencode` provider, not a provider itself.
 - Task tool for quick in-session subagents.
 - `goal-prompt-generator` to compose every goal prompt; `session-operating-map` to record lanes when one exists.
 

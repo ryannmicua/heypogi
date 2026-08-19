@@ -1,31 +1,31 @@
 ---
 name: paseo-escalate
 description: >-
-  Escalate a judgment call from the deepseek-v4-flash orchestrator to a frontier
+  Escalate a judgment call from the mimo-v2.5 orchestrator to a frontier
   reasoning model via the Paseo advisor. The escalated model is NOT hardcoded:
   resolve it from ~/.paseo/orchestration-preferences.json (planning category)
   first; if that file is missing, ask the user which model to escalate to,
   offering gpt-5.6-sol, opus 5, or minimax m3 (default). Use when
-  deepseek-v4-flash needs higher reasoning to think for it — high-stakes
+  mimo-v2.5 needs higher reasoning to think for it — high-stakes
   synthesis, planning, or contested tradeoffs. Not for routine questions or work
-  deepseek-v4-flash can handle.
+  mimo-v2.5 can handle.
 user-invocable: true
 argument-hint: "[question, tradeoff, or synthesis to escalate]"
 ---
 
 # Escalate to Frontier Advisor
 
-One Paseo advisor agent on a frontier reasoning model, fresh context, read-only. Used when the deepseek-v4-flash orchestrator needs a higher-reasoning model to think for it — high-stakes synthesis, planning, or contested tradeoffs. The advisor decides nothing and edits nothing; the orchestrator makes the call.
+One Paseo advisor agent on a frontier reasoning model, fresh context, read-only. Used when the mimo-v2.5 orchestrator needs a higher-reasoning model to think for it — high-stakes synthesis, planning, or contested tradeoffs. The advisor decides nothing and edits nothing; the orchestrator makes the call.
 
 **User's request:** $ARGUMENTS
 
 ## When to use
 
-- **High-stakes synthesis** — merging divergent committee/agent outputs into one call you can't make confidently on deepseek-v4-flash.
+- **High-stakes synthesis** — merging divergent committee/agent outputs into one call you can't make confidently on mimo-v2.5.
 - **Planning** — plan sequencing, scope boundaries, or approach selection where a wrong call is expensive.
 - **Contested tradeoffs** — architecture, direction, or cost/quality calls where you want frontier-model reasoning before committing.
 
-Do NOT use for routine questions, mechanical work, or anything deepseek-v4-flash handles fine — this spends limited frontier-model budget.
+Do NOT use for routine questions, mechanical work, or anything mimo-v2.5 handles fine — this spends limited frontier-model budget.
 
 ## Prerequisites
 

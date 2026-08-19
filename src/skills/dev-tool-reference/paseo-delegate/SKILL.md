@@ -2,7 +2,7 @@
 name: paseo-delegate
 description: >-
   Delegate a bounded, fully-specified execution task from a frontier-model
-  orchestrator down to the deepseek-v4-flash workhorse (opencode) via Paseo. The
+  orchestrator down to the mimo-v2.5 workhorse (opencode) via Paseo. The
   reverse of paseo-escalate. Use when the reasoning is already done — the plan
   or decision is written down — and the remaining work is implementation that a
   less intelligent model can follow. Not for tasks that still need judgment or
@@ -13,7 +13,7 @@ argument-hint: "[execution task or plan reference to delegate]"
 
 # Delegate to Execution Workhorse
 
-One Paseo agent on **opencode deepseek-v4-flash at max reasoning**, fresh context, write-capable. Used when the frontier-model orchestrator has already done the thinking and hands the execution to a cheaper, less intelligent model that can follow the written plan. The delegated agent does the work; the orchestrator reviews and arbitrates.
+One Paseo agent on **opencode mimo-v2.5 at max reasoning**, fresh context, write-capable. Used when the frontier-model orchestrator has already done the thinking and hands the execution to a cheaper, less intelligent model that can follow the written plan. The delegated agent does the work; the orchestrator reviews and arbitrates.
 
 This is the **reverse of `paseo-escalate`**: escalate sends judgment *up* to a frontier model; delegate sends execution *down* to the workhorse.
 
@@ -23,7 +23,7 @@ This is the **reverse of `paseo-escalate`**: escalate sends judgment *up* to a f
 
 - **Plan is written, implementation is not** — a plan, spec, or decision artifact exists and the remaining work is mechanical: implement it, verify it, done.
 - **Well-bounded implementation** — the task has explicit acceptance criteria, in-scope files, and a defined verify step, with no judgment left to make.
-- **Frontier session, execution volume** — you're operating on a frontier model (opencode/openai/gpt-5.6-sol, claude fable/opus) and want to keep cheap execution off your expensive session.
+- **Frontier session, execution volume** — you're operating on a frontier model (codex/gpt-5.6-sol, claude fable/opus) and want to keep cheap execution off your expensive session.
 - **Parallelizable chunks** — independent bounded tasks that can run concurrently without conflicting.
 
 Do NOT use when the task still requires reasoning — if writing the brief would force the executor to make a design decision, the thinking is not done. Resolve it first, then delegate.
@@ -34,13 +34,13 @@ Read the **paseo** skill. This skill hardcodes the provider and model, so it doe
 
 ## Fixed configuration
 
-- Provider: `opencode/opencode-go/deepseek-v4-flash`
+- Provider: `opencode/opencode-go/mimo-v2.5`
 - Thinking: `max` (`settings.thinkingOptionId = "max"`)
 - Fast mode + auto-accept: `settings: { features: { "fast_mode": true, "auto_accept": true } }`
 - Mode: `build`
 - Title: `[Delegate] <topic>`
 
-**Provider routing convention:** This workhorse is a DeepSeek model, so it stays on `opencode-go`. For any *OpenAI* model, prefer routing via the `opencode` provider as `opencode/openai/<model>` (e.g. `opencode/openai/gpt-5.6-sol`).
+**Provider routing convention:** This workhorse is a MiMo model, so it stays on `opencode-go`. For any *OpenAI* model, prefer routing via the `codex` provider as `codex/<model>` (e.g. `codex/gpt-5.6-sol`).
 
 ## The delegation brief
 

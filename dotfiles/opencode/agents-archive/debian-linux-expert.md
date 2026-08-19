@@ -5,7 +5,7 @@ description: >-
   "debian", "apt", "dpkg", "apt-get", "systemd", "debian packaging",
   "debian admin", "linux server", "apt pinning", "debian security".
 mode: all
-model: opencode-go/deepseek-v4-flash
+model: opencode-go/mimo-v2.5
 permission:
   edit: deny
   read: allow
