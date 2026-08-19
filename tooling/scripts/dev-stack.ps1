@@ -243,6 +243,17 @@ function Get-RunKeyValue {
   return (Get-ItemProperty $RunKeyPath -Name $Name -ErrorAction SilentlyContinue).$Name
 }
 
+# List the apps -App accepts. Triggered by -App list/apps/? so users don't
+# have to dig through Show-Help to find the valid values.
+function Show-AppList {
+  Write-Host "Apps supported by -App:" -ForegroundColor Cyan
+  Write-Host "  opencode      OpenCode (agent runtime)"
+  Write-Host "  openchamber   OpenChamber (web UI, port $OpenChamberPort)"
+  Write-Host "  paseo         Paseo (headless agent daemon + web UI, port $PaseoPort)"
+  Write-Host "                alias: paseo-cli"
+  Write-Host "  all           All of the above (default when -App is omitted)"
+}
+
 # Normalize a -App value into the internal app id list. "all" (or omitted,
 # via $Default) expands to every app; "paseo-cli" is accepted as an alias
 # for "paseo" since that's the actual npm package being managed.
@@ -256,8 +267,13 @@ function Resolve-AppList {
     "openchamber" { return @("openchamber") }
     "paseo"       { return @("paseo") }
     "paseo-cli"   { return @("paseo") }
+    { $_ -in @("list", "apps", "?") } {
+      Show-AppList
+      exit 0
+    }
     default {
       Write-Host "Unknown app '$App'. Valid: opencode, openchamber, paseo (alias: paseo-cli), all" -ForegroundColor Red
+      Write-Host "Run with -App list to see the supported apps." -ForegroundColor Yellow
       Write-Host ""
       Show-Help
       exit 1
@@ -1153,6 +1169,7 @@ function Show-Help {
   Write-Host "status/install/update/fix/start/stop all accept -App <opencode|openchamber|paseo|all>"
   Write-Host "to target just one app instead of all three (defaults to all when omitted)."
   Write-Host "e.g. 'update -App opencode' only checks/updates OpenCode, not the other two."
+  Write-Host "Run any command with -App list (or -App apps) to print the supported apps."
   Write-Host ""
   Write-Host "startup subcommands (autostart registration only, package stays installed):" -ForegroundColor Cyan
   Write-Host "  enable    <-App app>   Turn autostart on (registers it if missing). Defaults to -App all."
@@ -1199,6 +1216,10 @@ function Show-Help {
 
 # ---------- dispatch ----------
 if ($Help) { $Command = "help" }
+if (-not [string]::IsNullOrWhiteSpace($App) -and $App.ToLowerInvariant() -in @("list", "apps", "?")) {
+  Show-AppList
+  exit 0
+}
 $Command = $Command.ToLowerInvariant()
 if ($ValidCommands -notcontains $Command) {
   Write-Host "Unknown command '$Command'." -ForegroundColor Red
