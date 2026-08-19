@@ -1,0 +1,13 @@
+interface:
+  display_name: Work Brief Builder
+  short_description: Builds concise work briefs with clear scope, deliverables, and
+    acceptance criteria.
+  icon_small: assets/icon.svg
+  icon_large: assets/icon.svg
+policy:
+  products:
+  - chatgpt
+  - codex
+  - api
+  - atlas
+  allow_implicit_invocation: true

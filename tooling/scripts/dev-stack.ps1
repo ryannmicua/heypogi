@@ -243,6 +243,22 @@ function Get-RunKeyValue {
   return (Get-ItemProperty $RunKeyPath -Name $Name -ErrorAction SilentlyContinue).$Name
 }
 
+# Per-machine preferences (User-scope env vars, same convention as
+# OPENCHAMBER_UI_PASSWORD / OPENCHAMBER_SKIP_LOCAL_SERVER): unset/anything
+# other than "0"/"false" means "wanted" (today's default behavior on every
+# existing machine). Set to "0" on machines that intentionally don't want
+# autostart-at-login or inbound firewall exposure - `install`/`fix` then
+# skip registering it, and `status` stops flagging its absence as a FAIL.
+function Test-AutostartWanted {
+  $v = [Environment]::GetEnvironmentVariable("DEV_STACK_AUTOSTART", "User")
+  return -not ("$v" -eq "0" -or "$v".ToLowerInvariant() -eq "false")
+}
+
+function Test-FirewallWanted {
+  $v = [Environment]::GetEnvironmentVariable("DEV_STACK_FIREWALL", "User")
+  return -not ("$v" -eq "0" -or "$v".ToLowerInvariant() -eq "false")
+}
+
 # Normalize a -App value into the internal app id list. "all" (or omitted,
 # via $Default) expands to every app; "paseo-cli" is accepted as an alias
 # for "paseo" since that's the actual npm package being managed.
@@ -382,6 +398,8 @@ function Write-StatusReport {
 # ---------- status collection ----------
 function Collect-Status {
   $script:Checks.Clear()
+  $autostartWanted = Test-AutostartWanted
+  $firewallWanted = Test-FirewallWanted
   $latest = @{
     opencode    = $null
     openchamber = $null
@@ -478,7 +496,13 @@ function Collect-Status {
   $wrapperDir = Join-Path $env:USERPROFILE ".config\openchamber"
   $wrappersOk = (Test-Path (Join-Path $wrapperDir "startup.ps1")) -and (Test-Path (Join-Path $wrapperDir "launch.vbs"))
   $autoStartOk = $runValue -and $autoStart -and $wrappersOk
-  Add-Check "OpenChamber" "Autostart at login" $autoStartOk $(if ($autoStartOk) { "HKCU Run key + autoStart + wrappers" } else { "Run key: $(if ($runValue) {'set'} else {'MISSING'}), autoStart: $autoStart, wrappers: $wrappersOk" })
+  if ($autoStartOk) {
+    Add-Check "OpenChamber" "Autostart at login" $true "HKCU Run key + autoStart + wrappers"
+  } elseif (-not $autostartWanted) {
+    Add-Check "OpenChamber" "Autostart at login" $true "disabled on this machine (DEV_STACK_AUTOSTART=0)"
+  } else {
+    Add-Check "OpenChamber" "Autostart at login" $false "Run key: $(if ($runValue) {'set'} else {'MISSING'}), autoStart: $autoStart, wrappers: $wrappersOk"
+  }
 
   # openchamber UI password (env var, needed for remote access)
   $ocPwd = [Environment]::GetEnvironmentVariable("OPENCHAMBER_UI_PASSWORD", "User")
@@ -519,6 +543,8 @@ function Collect-Status {
     Add-Warn "OpenChamber" "Firewall allows 7777" "could not determine (run elevated to check)"
   } elseif ($firewall7777) {
     Add-Check "OpenChamber" "Firewall allows 7777" $true "inbound allow rule present"
+  } elseif (-not $firewallWanted) {
+    Add-Check "OpenChamber" "Firewall allows 7777" $true "disabled on this machine (DEV_STACK_FIREWALL=0)"
   } else {
     Add-Check "OpenChamber" "Firewall allows 7777" $false "no inbound allow rule found"
   }
@@ -568,7 +594,13 @@ function Collect-Status {
   # paseo autostart: scheduled task
   $task = Get-ScheduledTask -TaskName $PaseoTaskName -ErrorAction SilentlyContinue
   $taskOk = $null -ne $task -and $task.State -ne "Disabled"
-  Add-Check "Paseo" "Autostart at login" $taskOk $(if ($taskOk) { "scheduled task $PaseoTaskName ($($task.State))" } else { "scheduled task $PaseoTaskName MISSING/disabled" })
+  if ($taskOk) {
+    Add-Check "Paseo" "Autostart at login" $true "scheduled task $PaseoTaskName ($($task.State))"
+  } elseif (-not $autostartWanted) {
+    Add-Check "Paseo" "Autostart at login" $true "disabled on this machine (DEV_STACK_AUTOSTART=0)"
+  } else {
+    Add-Check "Paseo" "Autostart at login" $false "scheduled task $PaseoTaskName MISSING/disabled"
+  }
 
   # paseo config: listen on 0.0.0.0 + web UI enabled
   $paseoCfg = Join-Path $env:USERPROFILE ".paseo\config.json"
@@ -635,6 +667,8 @@ function Collect-Status {
     Add-Warn "Paseo" "Firewall allows 6767" "could not determine (run elevated to check)"
   } elseif ($firewall6767) {
     Add-Check "Paseo" "Firewall allows 6767" $true "inbound allow rule present"
+  } elseif (-not $firewallWanted) {
+    Add-Check "Paseo" "Firewall allows 6767" $true "disabled on this machine (DEV_STACK_FIREWALL=0)"
   } else {
     Add-Check "Paseo" "Firewall allows 6767" $false "no inbound allow rule found"
   }
@@ -648,6 +682,7 @@ function Get-IssueCount {
 function Invoke-Ensure {
   param([string]$App)
   $apps = Resolve-AppList -App $App
+  $autostartWanted = Test-AutostartWanted
 
   if ($apps -contains "openchamber") {
   # openchamber: not running -> start
@@ -656,7 +691,8 @@ function Invoke-Ensure {
     Safe-Invoke -What "Starting OpenChamber" -Body { & (Join-Path $PSScriptRoot "openchamber-ctl.ps1") start }
   }
   # openchamber autostart -> configure re-registers Run key + wrappers
-  if (-not (Get-RunKeyValue -Name $OpenChamberRunKey)) {
+  # (skipped when DEV_STACK_AUTOSTART=0 - this machine doesn't want it)
+  if ($autostartWanted -and -not (Get-RunKeyValue -Name $OpenChamberRunKey)) {
     Write-Host "Registering OpenChamber autostart..." -ForegroundColor Yellow
     Safe-Invoke -What "Registering OpenChamber autostart" -Body { & (Join-Path $PSScriptRoot "openchamber-ctl.ps1") configure }
   }
@@ -665,7 +701,7 @@ function Invoke-Ensure {
   if (Test-Path -LiteralPath $settingsPath) {
     $raw = Get-Content -LiteralPath $settingsPath -Raw
     if ($raw -match '"host"\s*:\s*"[^"]*"' -and $raw -notmatch '"host"\s*:\s*"0\.0\.0\.0"') {
-      if (-not $Force) {
+      if (-not $Force -and -not $Quiet) {
         $choice = Read-Choice -Prompt "OpenChamber settings host is not 0.0.0.0. Fix it? [Y]es, [N]o?" -ValidChoices @("Y", "N")
         if ($choice -eq "N") { return }
       }
@@ -707,8 +743,9 @@ function Invoke-Ensure {
     Safe-Invoke -What "Starting Paseo daemon" -Body { Invoke-PaseoDaemon start }
   }
   # paseo autostart -> register scheduled task
+  # (skipped when DEV_STACK_AUTOSTART=0 - this machine doesn't want it)
   $task = Get-ScheduledTask -TaskName $PaseoTaskName -ErrorAction SilentlyContinue
-  if (-not $task) {
+  if ($autostartWanted -and -not $task) {
     Write-Host "Registering PaseoDaemon scheduled task..." -ForegroundColor Yellow
     Install-PaseoScheduledTask | Out-Null
   }
@@ -718,7 +755,7 @@ function Invoke-Ensure {
     $raw = Get-Content -LiteralPath $paseoCfg -Raw
     $changed = $false
     if ($raw -match '"listen"\s*:\s*"[^"]*"' -and $raw -notmatch '"listen"\s*:\s*"0\.0\.0\.0:6767"') {
-      if (-not $Force) {
+      if (-not $Force -and -not $Quiet) {
         $choice = Read-Choice -Prompt "Paseo daemon.listen is not 0.0.0.0:6767. Fix it? [Y]es, [N]o?" -ValidChoices @("Y", "N")
         if ($choice -eq "N") { return }
       }
@@ -726,7 +763,7 @@ function Invoke-Ensure {
       $changed = $true
     }
     if ($raw -match '"webUi"\s*:\s*\{\s*"enabled"\s*:\s*false') {
-      if (-not $Force) {
+      if (-not $Force -and -not $Quiet) {
         $choice = Read-Choice -Prompt "Paseo webUi is disabled. Enable it? [Y]es, [N]o?" -ValidChoices @("Y", "N")
         if ($choice -eq "N") { return }
       }
@@ -734,7 +771,7 @@ function Invoke-Ensure {
       $changed = $true
     } elseif ($raw -notmatch '"webUi"\s*:') {
       # webUi block absent entirely (not just disabled) - insert it under "features"
-      if (-not $Force) {
+      if (-not $Force -and -not $Quiet) {
         $choice = Read-Choice -Prompt "Paseo webUi is not configured. Enable it? [Y]es, [N]o?" -ValidChoices @("Y", "N")
         if ($choice -eq "N") { return }
       }
@@ -838,7 +875,7 @@ function Invoke-Install {
 
   if ($toUpdate.Count -gt 0) {
     Write-Host ""
-    if (-not $Force) {
+    if (-not $Force -and -not $Quiet) {
       $choice = Read-Choice -Prompt "Install/update $($toUpdate -join ', ')? [Y]es, [N]o?" -ValidChoices @("Y", "N")
       if ($choice -eq "N") { exit 0 }
     }
@@ -1171,9 +1208,23 @@ function Show-Help {
   Write-Host "Options:" -ForegroundColor Cyan
   Write-Host "  -Command <cmd>  Command to run (same as the positional argument)."
   Write-Host "  -App <app>      App to target for 'startup'/'uninstall'/status/start/stop."
-  Write-Host "  -Quiet          Skip the npm latest-version lookups in 'status'."
+  Write-Host "  -Quiet          Skip the npm latest-version lookups in 'status'; on install/fix,"
+  Write-Host "                  also auto-accept config-fix confirmation prompts (like -Force,"
+  Write-Host "                  but without forcing anything destructive)."
   Write-Host "  -Force          Apply config fixes / skip confirmations without prompting."
   Write-Host "  -WipeConfig     With 'uninstall', also remove the app's config/settings."
+  Write-Host ""
+  Write-Host "Per-machine preferences (User-scope env vars, not repo config - set once per" -ForegroundColor Cyan
+  Write-Host "machine, persist across runs):"
+  Write-Host "  DEV_STACK_AUTOSTART=0   This machine doesn't want autostart-at-login."
+  Write-Host "                          install/fix skip registering it; status stops"
+  Write-Host "                          flagging its absence as an issue."
+  Write-Host "  DEV_STACK_FIREWALL=0    This machine doesn't want inbound firewall rules."
+  Write-Host "                          status stops flagging their absence as an issue."
+  Write-Host "                          (The script never creates firewall rules itself"
+  Write-Host "                          either way - see tooling/dev-stack.md.)"
+  Write-Host "  Set with:  [Environment]::SetEnvironmentVariable('DEV_STACK_AUTOSTART', '0', 'User')"
+  Write-Host "  Unset/'1' (or anything else) re-enables the default expectation."
   Write-Host ""
   Write-Host "Use single-dash flags (-App, -Quiet, ...) - '--app' only works when this"
   Write-Host "script is launched via 'powershell -File'; running it directly"
@@ -1183,6 +1234,7 @@ function Show-Help {
   Write-Host "  .\$exe                  # quick health check"
   Write-Host "  .\$exe fix              # fix whatever is broken"
   Write-Host "  .\$exe install -Force   # install/update everything, no prompts"
+  Write-Host "  .\$exe install -Quiet   # same, no prompts, plus quieter output"
   Write-Host "  .\$exe status -Quiet    # offline-friendly status check"
   Write-Host "  .\$exe update -App opencode -Force   # only update OpenCode"
   Write-Host "  .\$exe fix -App paseo-cli             # only fix Paseo's runtime state"

@@ -28,7 +28,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tooling/scripts/dev-stack.ps
 | `install` | Explicit full setup: detects missing/outdated tools, runs the installers (`opencode-ctl.ps1`, `openchamber-ctl.ps1`, `paseo-ctl.ps1`), restarts daemons, then ensures autostart + config (Run key, scheduled task, `0.0.0.0` listen, web UI, password reminders) and verifies. Idempotent - safe to re-run. |
 | `update` | Alias for `install`. |
 | `status` (default) | Read-only check of the intended state. Exit code 0 = all good, 1 = issues found, 2 = could not verify (npm offline). |
-| `fix` | Repairs runtime state: restarts stopped daemons, re-registers autostart, fixes listen config to `0.0.0.0` (prompted unless `-Force`), then re-verifies. |
+| `fix` | Repairs runtime state: restarts stopped daemons, re-registers autostart, fixes listen config to `0.0.0.0` (prompted unless `-Force` or `-Quiet`), then re-verifies. |
 | `start` | Starts OpenChamber + Paseo daemon (no-op if already running). |
 | `stop` | Stops OpenChamber + Paseo daemon. |
 | `startup <verb> [-App <app>]` | Manage autostart-at-login registration per tool (package stays installed). See below. |
@@ -51,6 +51,52 @@ fail with `A positional parameter cannot be found that accepts argument
 All commands accept `-Quiet` (suppress prompts/output) and `-Force` (skip
 confirmation prompts). `install` and `fix` prompt before any destructive
 action (stopping daemons, editing config files) unless `-Force` is given.
+`-Quiet` also auto-accepts those same confirmation prompts (so
+`install -Quiet` runs unattended too), but only for non-destructive config
+fixes - the uninstall-time "are you sure" prompts (e.g. `-WipeConfig`) still
+require `-Force`.
+
+## Per-machine preferences: autostart / firewall opt-out
+
+Some machines shouldn't autostart these tools at login, or shouldn't expose
+them on the LAN (inbound firewall rule) - e.g. a shared/managed machine, or
+one where you only ever use the tools locally. This isn't a repo-tracked
+setting (this repo is meant to reproduce the *same* environment across
+machines) - it's a per-machine preference, expressed the same way other
+machine-local settings already are here (`OPENCHAMBER_UI_PASSWORD`,
+`OPENCHAMBER_SKIP_LOCAL_SERVER`): a **User-scope environment variable**,
+set once per machine and persisted outside the repo.
+
+```powershell
+# On a machine that should NOT autostart OpenChamber/Paseo at login:
+[Environment]::SetEnvironmentVariable("DEV_STACK_AUTOSTART", "0", "User")
+
+# On a machine that should NOT expect an inbound firewall rule for 7777/6767:
+[Environment]::SetEnvironmentVariable("DEV_STACK_FIREWALL", "0", "User")
+
+# Re-enable the default expectation (or just remove the var):
+[Environment]::SetEnvironmentVariable("DEV_STACK_AUTOSTART", $null, "User")
+```
+
+Effect of `DEV_STACK_AUTOSTART=0`:
+- `install`/`fix` skip registering the OpenChamber Run key and the
+  `PaseoDaemon` scheduled task (they still start the services if not
+  running - this only opts out of *login* autostart).
+- `status` no longer reports missing autostart as a FAIL; it reports it as
+  `ok - disabled on this machine (DEV_STACK_AUTOSTART=0)` instead.
+- `startup enable`/`startup install` (explicit, targeted commands) still
+  work normally - this only changes the *implicit* behavior of
+  `install`/`fix`/`status`.
+
+Effect of `DEV_STACK_FIREWALL=0`:
+- `status` no longer reports a missing inbound allow rule as a FAIL for
+  that machine.
+- No functional change otherwise - the script never creates firewall rules
+  itself either way (see the "Windows Firewall" note under `status` checks
+  below); this only changes whether their absence counts as an issue.
+
+Unset (or any value other than `0`/`false`) means "wanted" - the default,
+matching every machine's behavior before this setting existed.
 
 ## `startup` - per-app autostart management
 
