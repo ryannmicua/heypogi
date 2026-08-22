@@ -442,6 +442,11 @@ do_start_app() {
                     echo_success "OpenChamber started"
                 else
                     echo_warn "OpenChamber may have failed to start"
+                    if [[ -z "${OPENCHAMBER_UI_PASSWORD:-}" ]]; then
+                        echo_warn "OpenChamber refuses to bind to 0.0.0.0 without a UI password. Set one first:"
+                        echo_warn "  export OPENCHAMBER_UI_PASSWORD=\"yourpassword\""
+                        echo_warn "  echo 'export OPENCHAMBER_UI_PASSWORD=\"yourpassword\"' >> ~/.bashrc"
+                    fi
                 fi
             else
                 echo_success "OpenChamber already running"
@@ -653,6 +658,11 @@ Examples:
   ./dev-stack.sh start                    # Start all services
   ./dev-stack.sh stop -a openchamber      # Stop OpenChamber only
   ./dev-stack.sh startup install -a paseo # Install Paseo systemd service
+
+OpenChamber will not bind to 0.0.0.0 (LAN-reachable) without a UI password.
+Set one before starting it:
+  export OPENCHAMBER_UI_PASSWORD="yourpassword"
+  echo 'export OPENCHAMBER_UI_PASSWORD="yourpassword"' >> ~/.bashrc
 EOF
     exit 0
 }
