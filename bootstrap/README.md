@@ -7,11 +7,14 @@ One-shot script to set up a machine as an AI Agentic Development VM.
 Running `bootstrap.sh` on a machine will:
 
 1. **Verify prerequisites** — checks for Node.js 22+, npm, git, curl, Docker, uv
-2. **Install AI agent CLIs** — Claude Code (Anthropic), Codex CLI (OpenAI), OpenCode
-3. **Install orchestration tools** — Paseo (agent orchestrator), OpenChamber (web UI)
+2. **Install AI agent CLIs** — Claude Code (Anthropic), Codex CLI (OpenAI), GitHub CLI
+3. **Install the Dev Stack** — delegates to `tooling/scripts/dev-stack.sh install -a all`
+   to install/update OpenCode, Paseo, and OpenChamber, so bootstrap never duplicates
+   dev-stack's install logic
 4. **Configure heypogi environment** — sets `HEYPOGI_ROOT`, `OPENCODE_CONFIG_DIR`, installs skills
 5. **Configure Paseo** — daemon config, orchestration preferences, systemd service
-6. **Install dev-stack** — management script for services
+6. **Install dev-stack** — management script for services; also starts Paseo via
+   `dev-stack.sh start -a paseo` once the systemd service is enabled
 
 After bootstrapping, the machine will have:
 - `claude` — Anthropic's coding agent

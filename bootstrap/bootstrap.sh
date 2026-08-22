@@ -207,14 +207,6 @@ if [[ "$SKIP_AGENTS" == false ]]; then
     fi
     sudo -u "$TARGET_USER" bash -c 'PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"; command -v codex' &>/dev/null && echo_success "Codex CLI" || echo_warn "Codex CLI - may need manual PATH setup"
 
-    # OpenCode
-    echo_info "Installing OpenCode..."
-    if ! sudo -u "$TARGET_USER" bash -c 'PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"; command -v opencode' &>/dev/null; then
-        run_as_user bash -c 'curl -fsSL https://opencode.ai/install | bash'
-        run_as_user bash -c 'echo "export PATH=\"\$HOME/.opencode/bin:\$PATH\"" >> ~/.bashrc'
-    fi
-    sudo -u "$TARGET_USER" bash -c 'PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"; command -v opencode' &>/dev/null && echo_success "OpenCode" || echo_warn "OpenCode - may need manual PATH setup"
-    
     # GitHub CLI
     echo_info "Installing GitHub CLI..."
     if ! command -v gh &>/dev/null; then
@@ -230,28 +222,25 @@ else
 fi
 
 # ======================================================================
-# Step 3: Install Paseo & OpenChamber
+# Step 3: Install the Dev Stack (OpenCode, OpenChamber, Paseo)
 # ======================================================================
+DEV_STACK_SRC="$HEYPOGI_ROOT/tooling/scripts/dev-stack.sh"
+
 if [[ "$SKIP_PASEO" == false ]]; then
     echo ""
-    echo_info "Step 3: Installing Paseo & OpenChamber..."
-    
-    # Paseo
-    echo_info "Installing Paseo..."
-    if ! command -v paseo &>/dev/null; then
-        run npm install -g @getpaseo/cli
+    echo_info "Step 3: Installing the Dev Stack (OpenCode, OpenChamber, Paseo)..."
+
+    if [[ ! -f "$DEV_STACK_SRC" ]]; then
+        echo_err "dev-stack.sh not found at $DEV_STACK_SRC"
+        exit 1
     fi
-    command -v paseo &>/dev/null && echo_success "Paseo $(paseo --version 2>/dev/null || echo 'installed')" || echo_warn "Paseo - may need manual install"
-    
-    # OpenChamber
-    echo_info "Installing OpenChamber..."
-    if ! command -v openchamber &>/dev/null; then
-        run npm install -g @openchamber/web
-    fi
-    command -v openchamber &>/dev/null && echo_success "OpenChamber $(openchamber --version 2>/dev/null || echo 'installed')" || echo_warn "OpenChamber - may need manual install"
+
+    # Delegate install to dev-stack.sh so bootstrap and dev-stack never
+    # drift into two different install code paths for the same tools.
+    run bash "$DEV_STACK_SRC" install -a all -f -q
 else
     echo ""
-    echo_info "Step 3: Skipping Paseo/OpenChamber"
+    echo_info "Step 3: Skipping Dev Stack install"
 fi
 
 # ======================================================================
@@ -401,6 +390,9 @@ SVCEOF
         run systemctl daemon-reload
         run systemctl enable paseo.service
         echo_success "paseo.service installed and enabled"
+
+        echo_info "Starting Paseo via dev-stack..."
+        run bash "$DEV_STACK_SRC" start -a paseo -q
     else
         echo_warn "Paseo binary not found, skipping systemd setup"
     fi
@@ -421,17 +413,17 @@ echo -e "${GREEN}Installed:${NC}"
 [[ "$SKIP_AGENTS" == false ]] && {
     command -v claude &>/dev/null   && echo -e "  ✓ Claude Code"
     command -v codex &>/dev/null    && echo -e "  ✓ Codex CLI"
-    command -v opencode &>/dev/null && echo -e "  ✓ OpenCode"
     command -v gh &>/dev/null       && echo -e "  ✓ GitHub CLI"
-}
-[[ "$SKIP_PASEO" == false ]] && {
-    command -v paseo &>/dev/null      && echo -e "  ✓ Paseo"
-    command -v openchamber &>/dev/null && echo -e "  ✓ OpenChamber"
 }
 echo -e "  ✓ dev-stack.sh (tooling/bin/dev-stack)"
 [[ "$SKIP_SERVICES" == false ]] && {
     systemctl list-unit-files paseo.service &>/dev/null 2>&1 && echo -e "  ✓ paseo.service (systemd)"
 }
+echo ""
+if [[ "$SKIP_PASEO" == false ]] && [[ -f "$DEV_STACK_SRC" ]]; then
+    echo -e "${GREEN}Dev Stack status:${NC}"
+    bash "$DEV_STACK_SRC" status || true
+fi
 echo ""
 echo -e "${YELLOW}Next Steps:${NC}"
 echo -e "  1. Open a new terminal (or source ~/.bashrc)"
@@ -439,6 +431,8 @@ echo -e "  2. Authenticate AI agents:"
 [[ "$SKIP_AGENTS" == false ]] && {
     echo -e "     ${CYAN}claude${NC}          # Anthropic account"
     echo -e "     ${CYAN}codex${NC}           # OpenAI account"
+}
+[[ "$SKIP_PASEO" == false ]] && {
     echo -e "     ${CYAN}opencode${NC}        # Run /connect inside TUI"
 }
 echo -e "  3. Configure Paseo:"
