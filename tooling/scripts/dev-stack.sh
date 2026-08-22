@@ -417,7 +417,16 @@ do_install() {
                 npm install -g "$PKG_OPENCHAMBER"
                 ;;
             paseo)
-                npm install -g "$PKG_PASEO"
+                # paseo_tag was computed above (from comparing the "latest"
+                # and "beta" dist-tags) but was never actually used here -
+                # this always installed plain @getpaseo/cli, i.e. whatever
+                # "latest" resolves to, even when a newer beta was detected
+                # and reported in the update message above.
+                if [[ "${paseo_tag:-latest}" == "beta" ]]; then
+                    npm install -g "${PKG_PASEO}@beta"
+                else
+                    npm install -g "$PKG_PASEO"
+                fi
                 ;;
         esac
     done
