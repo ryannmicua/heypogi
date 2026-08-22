@@ -160,7 +160,7 @@ write_status_report() {
         local mark="ok  "
         
         case "$status" in
-            FAIL) color="$RED"; mark="FAIL"; ((issues++)) ;;
+            FAIL) color="$RED"; mark="FAIL"; issues=$((issues+1)) ;;
             WARN) color="$YELLOW"; mark="WARN" ;;
         esac
         
@@ -534,7 +534,7 @@ do_fix() {
     local issues=0
     for entry in "${CHECKS[@]}"; do
         IFS='|' read -r service check status detail <<< "$entry"
-        [[ "$status" == "FAIL" ]] && ((issues++))
+        [[ "$status" == "FAIL" ]] && issues=$((issues+1))
     done
     
     if [[ $issues -eq 0 ]]; then
