@@ -128,7 +128,16 @@ get_dist_tag_version() {
 version_gte() {
     local v1="$1" v2="$2"
     [[ -z "$v1" || -z "$v2" ]] && return 1
-    printf '%s\n%s' "$v1" "$v2" | sort -V -C
+    # sort -V -C checks that its input is already sorted ascending, so to
+    # test "v1 >= v2" we must feed it v2 then v1 (true iff v2 <= v1). The
+    # original `printf v1 v2` tested the opposite (v1 <= v2), silently
+    # inverting every up-to-date check in this script: it reported "up to
+    # date" for anything NOT already newer than the registry - i.e. always,
+    # except the impossible case of a locally installed version somehow
+    # exceeding the registry's latest. Missing installs were unaffected
+    # (caught separately by the "not installed" check before this ever ran).
+    [[ "$v1" == "$v2" ]] && return 0
+    printf '%s\n%s' "$v2" "$v1" | sort -V -C
 }
 
 add_check() {
