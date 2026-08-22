@@ -284,12 +284,14 @@ export PATH=\"\$HEYPOGI_ROOT/tooling/bin:\$PATH\"
         run bash "$HEYPOGI_ROOT/tooling/scripts/install-skills.sh"
     fi
     
-    # Copy dev-stack.sh to tooling/bin if it exists
+    # Symlink (not copy) dev-stack.sh into tooling/bin if it exists, so future
+    # edits to dev-stack.sh are picked up immediately instead of silently
+    # drifting from a stale one-time copy.
     if [[ -f "$HEYPOGI_ROOT/tooling/scripts/dev-stack.sh" ]]; then
         mkdir -p "$HEYPOGI_ROOT/tooling/bin"
-        cp "$HEYPOGI_ROOT/tooling/scripts/dev-stack.sh" "$HEYPOGI_ROOT/tooling/bin/dev-stack"
-        chmod +x "$HEYPOGI_ROOT/tooling/bin/dev-stack"
-        echo_success "dev-stack script installed to tooling/bin"
+        ln -sf ../scripts/dev-stack.sh "$HEYPOGI_ROOT/tooling/bin/dev-stack"
+        chmod +x "$HEYPOGI_ROOT/tooling/scripts/dev-stack.sh"
+        echo_success "dev-stack script symlinked to tooling/bin"
     fi
     
     echo_success "Heypogi dotfiles configured"
