@@ -193,12 +193,22 @@ if [[ "$SKIP_AGENTS" == false ]]; then
     echo_info "Step 2: Installing AI Agent CLIs..."
     
     # Claude Code
+    # NOTE: claude's installer runs an interactive TUI ("claude install") as
+    # its last step to set up the launcher/shell integration. Over a
+    # non-interactive session (e.g. `ssh host 'bootstrap.sh --force'` with no
+    # pty) that TUI hangs indefinitely instead of failing - there is no
+    # documented non-interactive/CI flag for it. Bound it with `timeout` so
+    # bootstrap can't hang forever, and tell the operator to finish it by hand.
     echo_info "Installing Claude Code..."
     if ! sudo -u "$TARGET_USER" bash -c 'PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"; command -v claude' &>/dev/null; then
-        run_as_user bash -c 'curl -fsSL https://claude.ai/install.sh | bash'
-        run_as_user bash -c 'echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> ~/.bashrc'
+        if run_as_user timeout 90 bash -c 'curl -fsSL https://claude.ai/install.sh | bash'; then
+            run_as_user bash -c 'echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> ~/.bashrc'
+        else
+            echo_warn "Claude Code install did not finish automatically (its installer needs a real interactive terminal)."
+            echo_warn "Finish it yourself: SSH in interactively and run: curl -fsSL https://claude.ai/install.sh | bash"
+        fi
     fi
-    sudo -u "$TARGET_USER" bash -c 'PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"; command -v claude' &>/dev/null && echo_success "Claude Code" || echo_warn "Claude Code - may need manual PATH setup"
+    sudo -u "$TARGET_USER" bash -c 'PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"; command -v claude' &>/dev/null && echo_success "Claude Code" || echo_warn "Claude Code - needs manual interactive install (see above)"
 
     # Codex CLI
     echo_info "Installing Codex CLI..."
@@ -375,7 +385,11 @@ Wants=docker.service
 Type=simple
 User=$TARGET_USER
 WorkingDirectory=$TARGET_HOME
-ExecStart=$NODE_BIN --disable-warning=DEP0040 $PASEO_BIN daemon start
+# --foreground is required: without it, "daemon start" forks a detached
+# child and the launcher process exits 0 immediately, which a Type=simple
+# unit reads as the service exiting and restarts forever (a real
+# crash-loop, not just log noise).
+ExecStart=$NODE_BIN --disable-warning=DEP0040 $PASEO_BIN daemon start --listen 0.0.0.0:6767 --web-ui --foreground
 Restart=always
 RestartSec=10
 Environment=NODE_ENV=production

@@ -31,6 +31,7 @@ The machine must have:
 | Requirement | Why | How to install if missing |
 |-------------|-----|---------------------------|
 | **Ubuntu 22.04+** or **Debian 12+** | Target OS | Use cloud-init template |
+| **Guest CPU exposes AVX** (`grep avx /proc/cpuinfo`) | OpenCode's Bun-compiled binary requires AVX (its "baseline" build still needs SSE4.2+) and segfaults without it | On Proxmox, set the VM's `cpu:` type to `x86-64-v3` or newer (not the `kvm64`/default type) — requires a full `qm shutdown` + `qm start`, not just an in-guest reboot |
 | **Node.js 22+** | Required by all agent CLIs | `curl -fsSL https://deb.nodesource.com/setup_22.x \| sudo -E bash - && sudo apt install -y nodejs` |
 | **npm** | Package manager for agent CLIs | Comes with Node.js |
 | **git** | Clone repos, version control | `sudo apt install -y git` |
@@ -50,6 +51,7 @@ git --version    # Any recent version
 curl --version   # Any recent version
 docker --version # Optional but recommended
 uv --version     # Optional but recommended
+grep avx /proc/cpuinfo || echo "NO AVX - OpenCode will crash, fix the VM's CPU type first"
 ```
 
 ## Usage
@@ -162,12 +164,28 @@ echo 'export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-**Paseo daemon won't start**
+**Claude Code install didn't finish (bootstrap printed a warning about it)**
+
+Its installer's last step is an interactive TUI that needs a real terminal — it can't run over
+a plain non-interactive SSH command. Finish it yourself from an actual interactive session:
+```bash
+curl -fsSL https://claude.ai/install.sh | bash
+```
+
+**Paseo daemon won't start / `systemctl status` shows a high, climbing restart count**
 ```bash
 journalctl -u paseo.service -n 50
 cat ~/.paseo/config.json
 sudo systemctl restart paseo.service
 ```
+A high `NRestarts` count usually means `ExecStart` is missing `--foreground` — without it,
+`paseo daemon start` forks and exits immediately, and a `Type=simple` unit treats that as the
+service crashing, restarting it forever. Check `systemctl cat paseo.service` for the flag.
+
+**OpenCode crashes with "CPU lacks AVX support" / segfault**
+
+The VM's CPU type doesn't expose AVX to the guest — see the prerequisites table above. This is a
+host-level (Proxmox) fix, not something installable in-guest.
 
 **OpenChamber not running**
 ```bash
