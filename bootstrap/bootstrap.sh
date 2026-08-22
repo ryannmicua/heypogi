@@ -35,7 +35,7 @@ set -euo pipefail
 
 # --- Constants ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HEYPOGI_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+HEYPOGI_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # --- Defaults ---
 TARGET_USER="${TARGET_USER:-$(whoami)}"
@@ -194,28 +194,26 @@ if [[ "$SKIP_AGENTS" == false ]]; then
     
     # Claude Code
     echo_info "Installing Claude Code..."
-    if ! command -v claude &>/dev/null; then
-        run bash -c 'curl -fsSL https://claude.ai/install.sh | bash'
+    if ! sudo -u "$TARGET_USER" bash -c 'PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"; command -v claude' &>/dev/null; then
+        run_as_user bash -c 'curl -fsSL https://claude.ai/install.sh | bash'
         run_as_user bash -c 'echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> ~/.bashrc'
-        export PATH="$HOME/.local/bin:$PATH"
     fi
-    command -v claude &>/dev/null && echo_success "Claude Code" || echo_warn "Claude Code - may need manual PATH setup"
-    
+    sudo -u "$TARGET_USER" bash -c 'PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"; command -v claude' &>/dev/null && echo_success "Claude Code" || echo_warn "Claude Code - may need manual PATH setup"
+
     # Codex CLI
     echo_info "Installing Codex CLI..."
-    if ! command -v codex &>/dev/null; then
-        run bash -c 'curl -fsSL https://chatgpt.com/codex/install.sh | sh'
+    if ! sudo -u "$TARGET_USER" bash -c 'PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"; command -v codex' &>/dev/null; then
+        run_as_user bash -c 'curl -fsSL https://chatgpt.com/codex/install.sh | sh'
     fi
-    command -v codex &>/dev/null && echo_success "Codex CLI" || echo_warn "Codex CLI - may need manual PATH setup"
-    
+    sudo -u "$TARGET_USER" bash -c 'PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"; command -v codex' &>/dev/null && echo_success "Codex CLI" || echo_warn "Codex CLI - may need manual PATH setup"
+
     # OpenCode
     echo_info "Installing OpenCode..."
-    if ! command -v opencode &>/dev/null; then
-        run bash -c 'curl -fsSL https://opencode.ai/install | bash'
+    if ! sudo -u "$TARGET_USER" bash -c 'PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"; command -v opencode' &>/dev/null; then
+        run_as_user bash -c 'curl -fsSL https://opencode.ai/install | bash'
         run_as_user bash -c 'echo "export PATH=\"\$HOME/.opencode/bin:\$PATH\"" >> ~/.bashrc'
-        export PATH="$HOME/.opencode/bin:$PATH"
     fi
-    command -v opencode &>/dev/null && echo_success "OpenCode" || echo_warn "OpenCode - may need manual PATH setup"
+    sudo -u "$TARGET_USER" bash -c 'PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"; command -v opencode' &>/dev/null && echo_success "OpenCode" || echo_warn "OpenCode - may need manual PATH setup"
     
     # GitHub CLI
     echo_info "Installing GitHub CLI..."
@@ -264,8 +262,8 @@ if [[ "$SKIP_DOTFILES" == false ]]; then
     echo_info "Step 4: Configuring heypogi dotfiles..."
     
     # Set environment variables in .bashrc
-    local bashrc="$TARGET_HOME/.bashrc"
-    local env_block="
+    bashrc="$TARGET_HOME/.bashrc"
+    env_block="
 # === Heypogi Environment ===
 export HEYPOGI_ROOT=\"$HEYPOGI_ROOT\"
 export OPENCODE_CONFIG_DIR=\"$HEYPOGI_ROOT/dotfiles/opencode\"
