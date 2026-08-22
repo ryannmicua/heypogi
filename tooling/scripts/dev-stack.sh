@@ -267,15 +267,31 @@ collect_status() {
         "$(if [[ -n "$paseo_pid" ]]; then echo "pid $paseo_pid on port $PASEO_PORT"; else echo "not listening on $PASEO_PORT"; fi)"
     
     if [[ -n "$paseo_pid" ]]; then
-        local paseo_cmdline
+        local paseo_cmdline paseo_cmdline_lc
         paseo_cmdline=$(get_process_cmdline "$paseo_pid")
-        if [[ "$paseo_cmdline" == *"daemon-worker"* || "$paseo_cmdline" == *"paseo"* ]]; then
-            add_check "Paseo" "Daemon (not desktop)" "true" "daemon-worker.js"
+        # Case-insensitive: current Paseo versions set their own process
+        # title (e.g. "Paseo Daemon") via process.title, which no longer
+        # contains the literal "daemon-worker" or lowercase "paseo".
+        paseo_cmdline_lc="${paseo_cmdline,,}"
+        if [[ "$paseo_cmdline_lc" == *"daemon-worker"* || "$paseo_cmdline_lc" == *"paseo"* ]]; then
+            add_check "Paseo" "Daemon (not desktop)" "true" "$paseo_cmdline"
         else
-            add_check "Paseo" "Daemon (not desktop)" "false" "process is not daemon-worker"
+            add_check "Paseo" "Daemon (not desktop)" "false" "unrecognized process: $paseo_cmdline"
         fi
         add_check "Paseo" "Health" "$(test_health "http://localhost:$PASEO_PORT/api/health" && echo true || echo false)" \
             "http://localhost:$PASEO_PORT/api/health"
+
+        # --web-ui is a runtime flag on current Paseo, not a persisted config
+        # key (older versions had features.webUi.enabled in config.json;
+        # that key no longer exists on 0.4.0+). The socket-listening process
+        # itself renames its own cmdline (e.g. to "Paseo Daemon" via
+        # process.title), losing the flag, so scan all processes for the
+        # launcher that still has it rather than trusting one specific pid.
+        if ps -eo args= 2>/dev/null | grep -q -- '--web-ui'; then
+            add_check "Paseo" "Web UI enabled" "true" "daemon launched with --web-ui"
+        else
+            add_check "Paseo" "Web UI enabled" "false" "no paseo process found with --web-ui"
+        fi
     fi
     
     # Paseo systemd service
@@ -297,13 +313,13 @@ collect_status() {
     # Paseo config checks
     local paseo_cfg="$HOME/.paseo/config.json"
     if [[ -f "$paseo_cfg" ]]; then
-        local listen_ok webui_ok pwd_ok
+        local listen_ok pwd_ok
         listen_ok=$(grep -q '"listen".*"0\.0\.0\.0:'"$PASEO_PORT" "$paseo_cfg" 2>/dev/null && echo true || echo false)
         add_check "Paseo" "Config listen 0.0.0.0" "$listen_ok" "$(if [[ "$listen_ok" == "true" ]]; then echo "daemon.listen = 0.0.0.0:$PASEO_PORT"; else echo "daemon.listen is not 0.0.0.0:$PASEO_PORT"; fi)"
-        
-        webui_ok=$(grep -q '"enabled".*true' "$paseo_cfg" 2>/dev/null && echo true || echo false)
-        add_check "Paseo" "Web UI enabled" "$webui_ok" "$(if [[ "$webui_ok" == "true" ]]; then echo "features.webUi.enabled = true"; else echo "features.webUi not enabled"; fi)"
-        
+
+        # (Web UI enabled is checked above from the running process, not
+        # here - current Paseo has no persisted features.webUi config key.)
+
         # Check password is set (non-empty)
         if python3 -c "import json; c=json.load(open('$paseo_cfg')); assert c.get('daemon',{}).get('auth',{}).get('password','')" 2>/dev/null; then
             add_check "Paseo" "Password set" "true" "daemon.auth.password in config"

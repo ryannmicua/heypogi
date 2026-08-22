@@ -309,59 +309,32 @@ if [[ "$SKIP_PASEO" == false ]]; then
     
     PASEO_HOME="$TARGET_HOME/.paseo"
     run mkdir -p "$PASEO_HOME"
-    
-    # Config
+    PASEO_DOTFILES="$HEYPOGI_ROOT/dotfiles/paseo"
+
+    # Config — seeded from the repo template (dotfiles/paseo/config.json),
+    # never overwritten once present. That template deliberately has no
+    # auth.password key: this repo is public, and Paseo stores the auth
+    # password's bcrypt hash inline in this same file, so the live,
+    # password-bearing config must never be the tracked one. Set the
+    # password after provisioning with `paseo daemon set-password`.
     PASEO_CONFIG="$PASEO_HOME/config.json"
     if [[ ! -f "$PASEO_CONFIG" ]]; then
-        echo_info "Creating Paseo config..."
-        cat > "$PASEO_CONFIG" << 'PASEOEOF'
-{
-  "daemon": {
-    "listen": "0.0.0.0:6767",
-    "auth": {
-      "password": ""
-    }
-  },
-  "features": {
-    "webUi": {
-      "enabled": true
-    }
-  }
-}
-PASEOEOF
+        if [[ -f "$PASEO_DOTFILES/config.json" ]]; then
+            echo_info "Seeding Paseo config from dotfiles/paseo/config.json..."
+            run cp "$PASEO_DOTFILES/config.json" "$PASEO_CONFIG"
+        else
+            echo_warn "dotfiles/paseo/config.json not found - Paseo will use its own defaults (localhost-only) until configured."
+        fi
         echo_warn "Paseo auth password not set. Run 'paseo daemon set-password' after provisioning."
     fi
-    
-    # Orchestration preferences
+
+    # Orchestration preferences — no secrets, safe to seed as-is.
     ORCH_PREFS="$PASEO_HOME/orchestration-preferences.json"
-    if [[ ! -f "$ORCH_PREFS" ]]; then
-        echo_info "Creating orchestration preferences..."
-        cat > "$ORCH_PREFS" << 'ORCHEOF'
-{
-  "providers": {
-    "impl": "opencode",
-    "ui": "claude",
-    "research": "opencode",
-    "planning": "claude",
-    "planning_fallback": "codex",
-    "audit": "opencode"
-  },
-  "role_models": {
-    "impl": "opencode/opencode-go/mimo-v2.5",
-    "ui": "claude/claude-opus-5",
-    "research": "opencode/opencode-go/mimo-v2.5",
-    "planning": "claude/claude-opus-5",
-    "planning_fallback": "codex/gpt-5.6-sol",
-    "audit": "opencode/opencode-go/minimax-m3",
-    "audit_second_opinion": "codex/gpt-5.6-sol",
-    "vision": "opencode/opencode-go/mimo-v2.5",
-    "default": "opencode/opencode-go/mimo-v2.5",
-    "frontier": "codex/gpt-5.6-sol"
-  }
-}
-ORCHEOF
+    if [[ ! -f "$ORCH_PREFS" ]] && [[ -f "$PASEO_DOTFILES/orchestration-preferences.json" ]]; then
+        echo_info "Seeding orchestration preferences from dotfiles/paseo/..."
+        run cp "$PASEO_DOTFILES/orchestration-preferences.json" "$ORCH_PREFS"
     fi
-    
+
     echo_success "Paseo configured"
 fi
 
