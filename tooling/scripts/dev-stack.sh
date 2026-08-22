@@ -91,7 +91,7 @@ check_port() {
 
 get_listening_pid() {
     local port="$1"
-    ss -tlnp 2>/dev/null | grep ":$port " | grep -oP 'pid=\K[0-9]+' | head -1
+    ss -tlnp 2>/dev/null | grep ":$port " | grep -oP 'pid=\K[0-9]+' | head -1 || echo ""
 }
 
 get_process_cmdline() {
@@ -164,10 +164,6 @@ write_status_report() {
             WARN) color="$YELLOW"; mark="WARN" ;;
         esac
         
-        printf "  %-28s: %s" "$check" "$mark"
-        [[ -n "$detail" ]] && printf " - %s" "$detail"
-        echo -e "${NC}" | sed "s/^/$color/"
-        # Simpler approach:
         echo -ne "${color}"
         printf "  %-28s: %s" "$check" "$mark"
         [[ -n "$detail" ]] && printf " - %s" "$detail"
