@@ -34,8 +34,9 @@ The whole setup is scripted and idempotent:
 | Private key `.pem` | Generated on the app settings page | `/opt/rijam/secrets/rijam-dev.2026-08-23.private-key.pem` |
 | Installation IDs | Personal: `https://github.com/settings/installations/<ID>` · Org: `https://github.com/organizations/<org>/settings/installations/<ID>` | `ryannmicua=155890008`, `adventistasia=155890365` |
 
-Name installations whatever you like (`personal`, `<org-short-name>`, ...).
-The **first** one listed becomes the default for git pushes.
+Name installations after their org/login so tools can auto-select them from
+the repo path (`adventistasia/org-repo` → installation `adventistasia`).
+The **first** one listed is the fallback default when nothing matches.
 
 ## Run the installer
 

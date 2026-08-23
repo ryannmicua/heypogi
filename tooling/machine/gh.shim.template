@@ -10,7 +10,9 @@
 #
 # Installation selection (highest wins):
 #   1. GH_APP_INSTALLATION env var        (per-command or per-repo export)
-#   2. first installation listed in app.conf
+#   2. org in a command-line arg (e.g. `gh repo view ORG/repo`), if it
+#      matches a named installation
+#   3. first installation listed in app.conf
 #
 # Escape hatch: export GH_TOKEN or GITHUB_TOKEN yourself and this shim runs
 # the real gh untouched. Degrades gracefully: with no app.conf/token yet,
@@ -27,6 +29,15 @@ if [[ -z "${GH_TOKEN:-}" && -z "${GITHUB_TOKEN:-}" ]]; then
   name=${GH_APP_INSTALLATION:-}
   conf="$HOME/.config/github-app/app.conf"
   if [[ -f "$conf" ]]; then
+    if [[ -z "$name" ]]; then
+      for a in "$@"; do
+        while [[ "$a" == /* ]]; do a=${a#/}; done   # gh api /repos/ORG/x
+        case "$a" in -*|*=*) continue ;; esac       # skip flags and --flag=value
+        [[ "$a" == */* ]] || continue
+        cand=${a%%/*}
+        if grep -qE "^${cand}=" "$conf"; then name=$cand; break; fi
+      done
+    fi
     if [[ -z "$name" ]]; then
       name=$(grep -vE '^\s*#|^\s*$|GITHUB_APP_' "$conf" | head -1 | cut -d= -f1)
     fi

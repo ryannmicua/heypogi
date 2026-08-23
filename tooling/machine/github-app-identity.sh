@@ -10,7 +10,7 @@
 #   --app-id N             numeric GitHub App ID
 #   --slug NAME            app slug (bot becomes NAME[bot])
 #   --key PATH             path to the app's private-key .pem
-#   --installation N=ID    named installation, repeatable; first = default
+#   --installation N=ID    named installation, repeatable; first = fallback default
 #
 # Options:
 #   --client-id X          record Client ID as a comment only
@@ -161,6 +161,9 @@ wire_git() {
   # NOTE: value must START with '!' (shell-command helper). No surrounding
   # quotes — a leading '"' makes git treat the whole thing as a builtin name.
   git config --global --add credential.https://github.com.helper "!$LOCAL_BIN/git-credential-gh-app"
+  # Send the repo path to the helper so it can pick the installation whose
+  # name matches the org (e.g. adventistasia/org-repo -> installation 'adventistasia').
+  git config --global credential.https://github.com.useHttpPath true
   echo_success "git credential helper wired for https://github.com only"
 }
 

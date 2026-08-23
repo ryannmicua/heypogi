@@ -13,5 +13,7 @@ GITHUB_APP_SLUG=__SLUG__
 # Find IDs at the installation's Configure page URL:
 #   personal: https://github.com/settings/installations/<ID>
 #   org:      https://github.com/organizations/<org>/settings/installations/<ID>
-# The FIRST entry is the default used by git pushes (see git-credential-gh-app).
+# Name each entry after its org/login so tools can auto-select it from the
+# repo path (e.g. adventistasia/org-repo -> installation 'adventistasia').
+# The FIRST entry is the fallback default when nothing matches.
 __INSTALLATIONS__
