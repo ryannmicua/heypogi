@@ -2,8 +2,8 @@
 #=======================================================================
 # Script:    github-app-identity.sh
 # Purpose:   Set up a GitHub App as the machine-level agent identity:
-#            config home, token CLI, git credential helper, commit
-#            attribution. Idempotent - safe to re-run.
+#            config home, token CLI, git credential helper, gh CLI shim,
+#            commit attribution. Idempotent - safe to re-run.
 # Usage:     ./github-app-identity.sh [options]
 #
 # Required inputs (flags, or prompted on a terminal):
@@ -137,6 +137,24 @@ install_tools() {
   echo_success "tools installed: $LOCAL_BIN/gh-app-token, $LOCAL_BIN/git-credential-gh-app"
 }
 
+install_gh_shim() {
+  # Route every `gh` invocation through the app identity so all gh
+  # operations (Paseo daemon + agents included) are attributed to the bot.
+  local real_gh="" cand
+  while read -r cand; do
+    if [[ -n "$cand" && "$cand" != "$LOCAL_BIN/gh" ]]; then real_gh="$cand"; break; fi
+  done < <(type -ap gh 2>/dev/null)
+  if [[ -z "$real_gh" ]]; then
+    echo_warn "no gh CLI outside $LOCAL_BIN — gh shim skipped (install gh, re-run to add it)"
+    return 0
+  fi
+  local tmp="$LOCAL_BIN/.gh.shim.$$"
+  sed -e "s|__GH_BIN__|$real_gh|g" "$SCRIPT_DIR/gh.shim.template" > "$tmp"
+  mv "$tmp" "$LOCAL_BIN/gh"
+  chmod 755 "$LOCAL_BIN/gh"
+  echo_success "gh shim installed: $LOCAL_BIN/gh (resolves to $real_gh; gh calls act as ${SLUG}[bot])"
+}
+
 wire_git() {
   git config --global --unset-all credential.https://github.com.helper 2>/dev/null || true
   git config --global credential.https://github.com.helper ''
@@ -197,6 +215,19 @@ verify() {
     fail=1
   fi
 
+  # gh shim check: bare `gh` must resolve to the shim and auth as the bot.
+  echo_info "gh shim auth check"
+  if [[ "$(command -v gh || true)" == "$LOCAL_BIN/gh" ]]; then
+    if out=$(gh auth status 2>&1) && grep -q '\[bot\]' <<<"$out"; then
+      echo_success "gh acts as the app identity via $LOCAL_BIN/gh"
+    else
+      echo_err "gh did not authenticate as the bot (status: ${out:-empty})"
+      fail=1
+    fi
+  else
+    echo_warn "gh shim not active on PATH — skipping gh auth check"
+  fi
+
   (( fail == 0 )) || die "verification had failures"
   echo_success "ALL VERIFIED — GitHub App identity is live"
 }
@@ -212,6 +243,7 @@ else
   check_required
   install_conf
   install_tools
+  install_gh_shim
   wire_git
   if [[ "$SET_IDENTITY" == true ]]; then
     set_identity || true
@@ -222,7 +254,8 @@ verify
 
 echo ""
 echo_info "Daily use:"
-echo_info "  export GH_TOKEN=\$(gh-app-token $(grep -vE '^\s*#|^\s*$|GITHUB_APP_' "$CONF_FILE" | head -1 | cut -d= -f1))   # gh CLI"
+echo_info "  gh <command>                            # acts as the bot via the $LOCAL_BIN/gh shim"
 echo_info "  git push/pull over https://github.com just works (credential helper)"
 echo_info "  GH_APP_INSTALLATION=<name> <command>   # target a specific installation"
+echo_info "  export GH_TOKEN=\$(gh-app-token $(grep -vE '^\s*#|^\s*$|GITHUB_APP_' "$CONF_FILE" | head -1 | cut -d= -f1))   # explicit token for non-gh tools"
 

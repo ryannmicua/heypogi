@@ -20,6 +20,9 @@ The whole setup is scripted and idempotent:
 - The app's private key downloaded as a `.pem`
 - The app installed at least once (personal account and/or an org)
 - On the machine: `git`, `openssl`, `curl`, `jq`, and `~/.local/bin` on `$PATH`
+- Optional but recommended: GitHub CLI (`gh`) — lets the installer drop a
+  `gh` shim so **every** `gh` call (Paseo daemon and its agents included)
+  acts as the bot with no per-session `GH_TOKEN` export
 
 ## Inputs to collect
 
@@ -66,6 +69,7 @@ It ends with a verification pass and prints `ALL VERIFIED` when live.
 | `~/.config/github-app/private-key.pem` | symlink or copy of your `.pem` | JWT signing key |
 | `~/.local/bin/gh-app-token` | [`tooling/machine/gh-app-token`](gh-app-token) | Mint/cache installation tokens (1h TTL, refreshed 5 min early) |
 | `~/.local/bin/git-credential-gh-app` | [`tooling/bin/git-credential-gh-app`](git-credential-gh-app) | Git credential helper for `https://github.com` only |
+| `~/.local/bin/gh` | [`tooling/machine/gh.shim.template`](gh.shim.template) | Shim: injects an installation token into every `gh` call, so gh acts as `<slug>[bot]`. Passes through your own `GH_TOKEN`/`GITHUB_TOKEN`; skipped if no real `gh` exists outside `~/.local/bin` |
 | `git config --global credential.https://github.com.helper` | wired by script | Routes github.com HTTPS auth through the helper |
 | `~/.cache/github-app/tokens/` (700) | created on demand | Token cache keyed by installation name |
 
@@ -86,15 +90,18 @@ token behind the scenes). Or re-run the installer with `--verify-only`.
 ## Daily use by agents
 
 ```bash
-# gh CLI for a session — pick the installation whose repos you need:
-export GH_TOKEN=$(gh-app-token ryannmicua)
-gh api installation/repositories --jq '.total_count'
+# gh CLI just works as the bot via the ~/.local/bin/gh shim — no export needed:
+gh pr list -R ryannmicua/heypogi
+gh auth status                 # -> Logged in to github.com account <slug>[bot] (GH_TOKEN)
 
 # git over HTTPS just works (helper mints/caches tokens automatically):
 git pull && git push
 
 # target a specific installation for one command:
-GH_APP_INSTALLATION=adventistasia git push
+GH_APP_INSTALLATION=adventistasia gh api installation/repositories --jq '.total_count'
+
+# act as yourself for one command (escape hatch):
+GH_TOKEN=<your-user-token> gh api user
 ```
 
 Commit attribution is per-repo config (global was set here via
@@ -124,7 +131,13 @@ and confirm the app has Contents read/write.
 
 **`gh` complains about missing scopes** — expected sometimes: installation
 tokens are scoped by app permissions, not OAuth scopes. Repo/API operations
-covered by the app's permissions work fine.
+covered by the app's permissions work fine (e.g. `GET /user` 403s by design;
+repo/PR endpoints are what tools like Paseo need).
+
+**`gh` shim not taking effect for a tool** — the caller must resolve `gh`
+via `$PATH` with `~/.local/bin` first (`type -a gh` to check). Tools pinned
+to `/usr/bin/gh` bypass the shim; restart the Paseo daemon after installing
+the shim so fresh agent processes pick it up.
 
 **Helper not used for a remote** — it only answers for `https://github.com`.
 SSH remotes bypass it entirely (by design).
@@ -134,6 +147,7 @@ SSH remotes bypass it entirely (by design).
 ```bash
 git config --global --remove-section credential.https://github.com 2>/dev/null || true
 rm -rf ~/.config/github-app ~/.cache/github-app ~/.local/bin/gh-app-token ~/.local/bin/git-credential-gh-app
+rm -f ~/.local/bin/gh   # only if you never kept your own gh there
 ```
 
 ## Related docs in this folder

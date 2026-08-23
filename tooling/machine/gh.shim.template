@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# gh — shim so EVERY GitHub CLI call on this machine acts as the GitHub App
+# identity (<slug>[bot]) instead of requiring a personal login.
+#
+# Why: tools that exec `gh` by PATH (Paseo daemon + its agents, IDE GitHub
+# features) get the bot identity automatically. Installation tokens are
+# short-lived (~1h), so they are minted/cached per invocation via
+# gh-app-token. Git push/pull attribution continues to flow through
+# git-credential-gh-app; nothing here touches git config.
+#
+# Installation selection (highest wins):
+#   1. GH_APP_INSTALLATION env var        (per-command or per-repo export)
+#   2. first installation listed in app.conf
+#
+# Escape hatch: export GH_TOKEN or GITHUB_TOKEN yourself and this shim runs
+# the real gh untouched. Degrades gracefully: with no app.conf/token yet,
+# plain unauthenticated gh behavior is preserved.
+#
+# __GH_BIN__ is resolved at install time by github-app-identity.sh.
+# Installed to: ~/.local/bin/gh (must precede the real gh on PATH)
+# Canonical copy: heypogi repo tooling/machine/gh.shim.template
+set -euo pipefail
+
+REAL_GH="__GH_BIN__"
+
+if [[ -z "${GH_TOKEN:-}" && -z "${GITHUB_TOKEN:-}" ]]; then
+  name=${GH_APP_INSTALLATION:-}
+  conf="$HOME/.config/github-app/app.conf"
+  if [[ -f "$conf" ]]; then
+    if [[ -z "$name" ]]; then
+      name=$(grep -vE '^\s*#|^\s*$|GITHUB_APP_' "$conf" | head -1 | cut -d= -f1)
+    fi
+    if [[ -n "$name" ]] && token=$("$HOME/.local/bin/gh-app-token" "$name" 2>/dev/null); then
+      export GH_TOKEN="$token"
+    fi
+  fi
+fi
+
+exec "$REAL_GH" "$@"
