@@ -27,6 +27,20 @@ To suppress prompts (e.g. for scripting):
 powershell -NoProfile -ExecutionPolicy Bypass -File tooling/sources/clone-ce-source.ps1 -Quiet
 ```
 
+### Linux/macOS
+
+Run from the repo root:
+
+```bash
+bash tooling/sources/clone-ce-source.sh
+```
+
+To suppress prompts:
+
+```bash
+bash tooling/sources/clone-ce-source.sh --quiet
+```
+
 ## Verify
 
 ```powershell
@@ -44,3 +58,6 @@ git -C external/compound-engineering log --oneline -3
 
 - The `external/compound-engineering/` directory is in `.gitignore` — it is not committed to this repo.
 - Re-running the script prompts to pull latest instead of re-cloning.
+- Successful clones/pulls record branch, commit, and timestamp in the local
+  freshness ledger `external/.repo-update-status.json`, which
+  [`get-external-repo-status`](get-external-repo-status.ps1) reads.

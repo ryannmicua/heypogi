@@ -21,13 +21,23 @@ This project vendors three external repos under `external/` via standalone clone
 
 Run the clone scripts for each external repo. Each script clones if missing, or pulls if present:
 
+Windows:
+
 ```powershell
-& ".\tooling\scripts\clone-ce-source.ps1" -Quiet
-& ".\tooling\scripts\clone-knowledge-source.ps1" -Quiet
-& ".\tooling\scripts\clone-opencode-source.ps1" -Quiet
+& ".\tooling\sources\clone-ce-source.ps1" -Quiet
+& ".\tooling\sources\clone-knowledge-source.ps1" -Quiet
+& ".\tooling\sources\clone-opencode-source.ps1" -Quiet
 ```
 
-The `-Quiet` flag skips the interactive Y/N prompt and pulls automatically. Each
+Linux/macOS:
+
+```bash
+bash tooling/sources/clone-ce-source.sh --quiet
+bash tooling/sources/clone-knowledge-source.sh --quiet
+bash tooling/sources/clone-opencode-source.sh --quiet
+```
+
+The `-Quiet` / `--quiet` flag skips the interactive Y/N prompt and pulls automatically. Each
 successful clone or pull records its UTC timestamp, branch, commit, and remote in
 the ignored local ledger at `external/.repo-update-status.json`.
 
@@ -35,13 +45,25 @@ the ignored local ledger at `external/.repo-update-status.json`.
 
 After pulling, check the latest commits and confirm the freshness tracker:
 
+Windows:
+
 ```powershell
 foreach ($dir in @("compound-engineering", "compound-knowledge", "opencode")) {
   $path = ".\external\$dir"
   Write-Host "$dir : $(git -C $path log --oneline -1)"
 }
 
-& ".\tooling\scripts\get-external-repo-status.ps1"
+& ".\tooling\sources\get-external-repo-status.ps1"
+```
+
+Linux/macOS:
+
+```bash
+for dir in compound-engineering compound-knowledge opencode; do
+  echo "$dir : $(git -C "external/$dir" log --oneline -1)"
+done
+
+bash tooling/sources/get-external-repo-status.sh
 ```
 
 The status command reports `CURRENT` for each successfully refreshed repository.

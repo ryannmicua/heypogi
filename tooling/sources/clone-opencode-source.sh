@@ -5,10 +5,10 @@ quiet=0
 
 usage() {
   cat <<'EOF'
-Clones the Compound Knowledge source repository into external/compound-knowledge/.
+Clones the OpenCode source repository into external/opencode/.
 
 Usage:
-  bash tooling/sources/clone-knowledge-source.sh [--quiet]
+  bash tooling/sources/clone-opencode-source.sh [--quiet]
 
 Options:
   --quiet  Pull without prompting; ensure the repo is present
@@ -26,8 +26,8 @@ done
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd "${script_dir}/../.." && pwd -P)"
 external_dir="${repo_root}/external"
-target_dir="${external_dir}/compound-knowledge"
-clone_url="https://github.com/EveryInc/compound-knowledge-plugin.git"
+target_dir="${external_dir}/opencode"
+clone_url="https://github.com/anomalyco/opencode.git"
 status_recorder="${script_dir}/record-external-repo-update.sh"
 
 if [[ ! -d "${external_dir}" ]]; then
@@ -44,7 +44,7 @@ if [[ -d "${target_dir}" ]]; then
   if [[ "${quiet}" -eq 1 ]]; then
     pull=1
   else
-    printf "Compound Knowledge source already cloned at: %s\n" "${target_dir}"
+    printf "OpenCode source already cloned at: %s\n" "${target_dir}"
     printf "Pull latest? [y/N] "
     IFS= read -r answer </dev/tty || answer=""
     answer="$(printf "%s" "${answer}" | tr '[:upper:]' '[:lower:]' | xargs || true)"
@@ -58,18 +58,18 @@ if [[ -d "${target_dir}" ]]; then
     did_update=1
   fi
 else
-  printf "Cloning compound-knowledge source into %s ...\n" "${target_dir}"
-  git clone --depth 1 "${clone_url}" "${target_dir}"
+  printf "Cloning opencode source into %s ...\n" "${target_dir}"
+  git clone "${clone_url}" "${target_dir}"
   did_update=1
 fi
 
 if [[ "${did_update}" -eq 1 ]]; then
-  bash "${status_recorder}" --name compound-knowledge --repository-path "${target_dir}"
+  bash "${status_recorder}" --name opencode --repository-path "${target_dir}"
 fi
 
 if [[ "${quiet}" -ne 1 ]]; then
   printf "\n"
-  printf "Compound Knowledge source: %s\n" "${target_dir}"
+  printf "OpenCode source: %s\n" "${target_dir}"
   printf "  Branch: "
   git -C "${target_dir}" branch --show-current
   printf "  Remote: "

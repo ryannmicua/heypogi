@@ -58,3 +58,6 @@ git -C external/compound-knowledge log --oneline -3
 
 - The `external/compound-knowledge/` directory is in `.gitignore` — it is not committed to this repo.
 - Re-running the script prompts to pull latest instead of re-cloning.
+- Successful clones/pulls record branch, commit, and timestamp in the local
+  freshness ledger `external/.repo-update-status.json`, which
+  [`get-external-repo-status`](get-external-repo-status.ps1) reads.
