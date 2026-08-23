@@ -20,8 +20,8 @@ Treat config as a versioned kit (prompts, skills, templates, agent configs) plus
 ## Key metrics
 
 - **Config drift incidents** - count of times a machine behaves differently from another (inconsistent agent answers, missing skill, stale dotfile) traced back to heypogi being out of sync; noticed informally, logged in `docs/open_items_register.md` if it recurs. Should trend toward zero.
-- **Time-to-working-machine** - how long from fresh clone to `check-dev-stack.ps1 status` reporting fully green, and whether any manual/undocumented fix was needed. Tracked per new-machine setup.
-- **Dev Stack version staleness** - how far installed `opencode-ai`/`@openchamber/web`/`@getpaseo/cli` fall behind latest before being noticed and fixed, per `check-dev-stack.ps1 status` output.
+- **Time-to-working-machine** - how long from fresh clone to `dev-stack.ps1 status` reporting fully green, and whether any manual/undocumented fix was needed. Tracked per new-machine setup.
+- **Dev Stack version staleness** - how far installed `opencode-ai`/`@openchamber/web`/`@getpaseo/cli` fall behind latest before being noticed and fixed, per `dev-stack.ps1 status` output.
 
 ## Tracks
 
@@ -33,7 +33,7 @@ _Why it serves the approach:_ this is the versioned half of "kit + installer" - 
 
 ### Dev Stack install/repair (tooling/)
 
-The idempotent PowerShell scripts (`check-dev-stack.ps1` and friends) that install, verify, and repair OpenCode, OpenChamber, and Paseo on any machine.
+The idempotent PowerShell scripts (`dev-stack.ps1` and friends) that install, verify, and repair OpenCode, OpenChamber, and Paseo on any machine.
 
 _Why it serves the approach:_ this is the "installer" half - what makes convergence-on-demand possible instead of manual setup.
 

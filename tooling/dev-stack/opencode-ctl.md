@@ -13,7 +13,7 @@ runs as an OpenChamber sidecar or directly from a terminal — so there is no
 ## Usage
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tooling/scripts/opencode-ctl.ps1 [command]
+powershell -NoProfile -ExecutionPolicy Bypass -File tooling/dev-stack/opencode-ctl.ps1 [command]
 ```
 
 | Command | What it does |
@@ -27,7 +27,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tooling/scripts/opencode-ctl
 ## Install / update (fresh machine or upgrade)
 
 ```powershell
-tooling/scripts/opencode-ctl.ps1 install
+tooling/dev-stack/opencode-ctl.ps1 install
 ```
 
 Detects the current version and upgrades if a newer one is available. If
@@ -38,13 +38,13 @@ OpenCode is running, it asks to close it first (unless `-Quiet`).
 Suppresses prompts (auto-kills running opencode, no version banner):
 
 ```powershell
-tooling/scripts/opencode-ctl.ps1 install -Quiet
+tooling/dev-stack/opencode-ctl.ps1 install -Quiet
 ```
 
 ## Uninstall
 
 ```powershell
-tooling/scripts/opencode-ctl.ps1 uninstall
+tooling/dev-stack/opencode-ctl.ps1 uninstall
 ```
 
 Stops any running `opencode` process and removes the npm package. Config
@@ -53,7 +53,7 @@ Stops any running `opencode` process and removes the npm package. Config
 `-Force` is given too.
 
 ```powershell
-tooling/scripts/opencode-ctl.ps1 uninstall -WipeConfig
+tooling/dev-stack/opencode-ctl.ps1 uninstall -WipeConfig
 ```
 
 ## Prerequisites

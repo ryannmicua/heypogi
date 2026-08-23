@@ -20,13 +20,13 @@ docs source directly.
 Run from the repo root:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tooling/scripts/clone-opencode-source.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File tooling/sources/clone-opencode-source.ps1
 ```
 
 To suppress prompts (e.g. for scripting):
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tooling/scripts/clone-opencode-source.ps1 -Quiet
+powershell -NoProfile -ExecutionPolicy Bypass -File tooling/sources/clone-opencode-source.ps1 -Quiet
 ```
 
 ## Verify

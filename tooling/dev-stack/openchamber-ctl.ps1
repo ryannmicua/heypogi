@@ -155,7 +155,7 @@ function Invoke-Configure {
   $wrapperDir = Get-WrapperDir
   $settingsPath = Get-SettingsPath
   $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-  $template = Join-Path $repoRoot "tooling\openchamber.settings.json"
+  $template = Join-Path $repoRoot "tooling\stack\openchamber.settings.json"
 
   New-Item -ItemType Directory -Path $wrapperDir -Force | Out-Null
 
@@ -195,7 +195,7 @@ if (Test-Path -LiteralPath `$settingsPath) {
   if (`$null -ne `$file.port) { `$settings.port = [int]`$file.port }
   if (`$null -ne `$file.host -and "`$(`$file.host)".Trim() -ne "") { `$settings.host = "`$(`$file.host)".Trim() }
 }
-if (-not (Test-Path -LiteralPath "$cli")) { throw "OpenChamber CLI not found: $cli. Run tooling/scripts/openchamber-ctl.ps1 install" }
+if (-not (Test-Path -LiteralPath "$cli")) { throw "OpenChamber CLI not found: $cli. Run tooling/dev-stack/openchamber-ctl.ps1 install" }
 & "$node" "$cli" serve --foreground --port `$settings.port --host `$settings.host
 "@ | Set-Content -LiteralPath $startupPs1 -Encoding UTF8
 

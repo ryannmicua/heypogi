@@ -8,7 +8,7 @@ usage() {
 Install Compound Knowledge plugin skills by linking the repo's plugin skills folder into ~/.agents/skills/compound-knowledge.
 
 Usage:
-  bash tooling/scripts/install-knowledge-skills.sh [--create-dest]
+  bash tooling/skills/install-knowledge-skills.sh [--create-dest]
 
 Options:
   --create-dest  Create ~/.agents/skills if missing (only after user approval)

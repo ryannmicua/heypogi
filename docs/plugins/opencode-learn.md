@@ -55,6 +55,6 @@ Corrections graduate to proposed rules only after recurring (freq ≥ 2). Single
 
 ## Related
 
-- [Installation guide →](../../tooling/install-opencode-learn.md)
+- [Installation guide →](../../tooling/skills/install-opencode-learn.md)
 - [Plugin source →](../../src/plugins/opencode-learn/)
 

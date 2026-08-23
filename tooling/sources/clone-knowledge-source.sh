@@ -8,7 +8,7 @@ usage() {
 Clones the Compound Knowledge source repository into external/compound-knowledge/.
 
 Usage:
-  bash tooling/scripts/clone-knowledge-source.sh [--quiet]
+  bash tooling/sources/clone-knowledge-source.sh [--quiet]
 
 Options:
   --quiet  Suppress prompts and just ensure the repo is present

@@ -47,7 +47,7 @@ Cloned into `external/` for reference by OpenCode subagents:
 
 ## Environment variables
 
-Set by `tooling/scripts/setup-environment.ps1`:
+Set by `tooling/machine/setup-environment.ps1`:
 
 | Variable | Value | Purpose |
 |---|---|---|

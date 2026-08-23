@@ -11,20 +11,20 @@ Clones the [Compound Engineering](https://github.com/EveryInc/compound-engineeri
 
 1. Clones `https://github.com/EveryInc/compound-engineering-plugin.git` into `external/compound-engineering/`
    (or pulls latest if already cloned)
-2. Keeps the local source checkout available for the skills installer at `tooling/install-ce-skills.md`
+2. Keeps the local source checkout available for the skills installer at `tooling/skills/install-ce-skills.md`
 
 ## Install
 
 Run from the repo root:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tooling/scripts/clone-ce-source.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File tooling/sources/clone-ce-source.ps1
 ```
 
 To suppress prompts (e.g. for scripting):
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tooling/scripts/clone-ce-source.ps1 -Quiet
+powershell -NoProfile -ExecutionPolicy Bypass -File tooling/sources/clone-ce-source.ps1 -Quiet
 ```
 
 ## Verify

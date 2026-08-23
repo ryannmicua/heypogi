@@ -18,7 +18,7 @@ Explain why: Codex discovers user skills from `~/.agents/skills`, so the folder 
 2. If destination folder exists, run the installer script from the repo root:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tooling/scripts/install-skills.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File tooling/skills/install-skills.ps1
 ```
 
 3. If destination folder does not exist:
@@ -26,7 +26,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tooling/scripts/install-skil
    - If approved, run:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tooling/scripts/install-skills.ps1 -CreateDest
+powershell -NoProfile -ExecutionPolicy Bypass -File tooling/skills/install-skills.ps1 -CreateDest
 ```
 
 ### Linux/macOS
@@ -34,7 +34,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tooling/scripts/install-skil
 If destination folder exists, run:
 
 ```bash
-bash tooling/scripts/install-skills.sh
+bash tooling/skills/install-skills.sh
 ```
 
 If destination folder does not exist:
@@ -43,7 +43,7 @@ If destination folder does not exist:
 - If approved, run:
 
 ```bash
-bash tooling/scripts/install-skills.sh --create-dest
+bash tooling/skills/install-skills.sh --create-dest
 ```
 
 ## Notes

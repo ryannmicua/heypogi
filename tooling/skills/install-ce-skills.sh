@@ -5,10 +5,10 @@ create_dest=0
 
 usage() {
   cat <<'EOF'
-Install this repo's skills by linking the repo src/skills folder into ~/.agents/skills/heypogi.
+Install Compound Engineering plugin skills by linking the repo external folder into ~/.agents/skills/compound-engineering.
 
 Usage:
-  bash tooling/scripts/install-skills.sh [--create-dest]
+  bash tooling/skills/install-ce-skills.sh [--create-dest]
 
 Options:
   --create-dest  Create ~/.agents/skills if missing (only after user approval)
@@ -25,12 +25,12 @@ done
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd "${script_dir}/../.." && pwd -P)"
-skills_root="${repo_root}/src/skills"
+skills_root="$(cd "${repo_root}/external/compound-engineering/skills" && pwd -P)"
 dest_dir="${HOME}/.agents/skills"
-dest_path="${dest_dir}/heypogi"
+dest_path="${dest_dir}/compound-engineering"
 
 if [[ ! -d "${skills_root}" ]]; then
-  echo "Could not find repo skills folder at: ${skills_root}" >&2
+  echo "Could not find CE plugin skills folder at: ${skills_root}" >&2
   exit 1
 fi
 
@@ -69,7 +69,7 @@ prompt_overwrite() {
 }
 
 if [[ -e "${dest_path}" || -L "${dest_path}" ]]; then
-  expected_target="$(cd "${skills_root}" && pwd -P)"
+  expected_target="${skills_root}"
   current_target=""
   if [[ -L "${dest_path}" ]]; then
     current_target="$(readlink "${dest_path}" || true)"

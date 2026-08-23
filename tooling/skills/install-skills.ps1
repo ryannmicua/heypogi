@@ -39,7 +39,7 @@ function Read-Choice {
 function Get-RepoRootFromScriptLocation {
   param([string]$ScriptRoot)
 
-  # This script lives at: <repo>/tooling/scripts
+  # This script lives at: <repo>/tooling/<domain> (two levels below repo root)
   $repoRoot = Resolve-Path (Join-Path $ScriptRoot "..\..")
   return $repoRoot.Path
 }

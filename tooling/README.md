@@ -29,7 +29,7 @@ The intended state, verified by `dev-stack.ps1`:
 # 1. Prerequisite: Node.js (https://nodejs.org) - required by npm
 
 # 2. One command: installs all three tools + configures autostarts + verifies
-tooling/scripts/dev-stack.ps1 install
+tooling/dev-stack/dev-stack.ps1 install
 
 # 3. Manual: set the two UI passwords (interactive, cannot be automated;
 #    the script prints reminders when they are missing)
@@ -47,13 +47,13 @@ paseo daemon set-password
 #    - add http://localhost:7777 to the desktop app's host list
 
 # 5. Confirm everything is as intended
-tooling/scripts/dev-stack.ps1 status
+tooling/dev-stack/dev-stack.ps1 status
 ```
 
-## Supervisor — `tooling/scripts/dev-stack.ps1`
+## Supervisor — `tooling/dev-stack/dev-stack.ps1`
 
 One entry point for the whole stack. Full reference:
-[`dev-stack.md`](dev-stack.md).
+[`dev-stack.md`](stack/dev-stack.md).
 
 | Command | Role |
 |---------|------|
@@ -70,13 +70,14 @@ also works standalone (install/status/uninstall, plus start/stop for the two
 daemon-backed tools).
 
 Every check it performs, plus autostart/health details:
-[`dev-stack.md`](dev-stack.md).
+[`dev-stack.md`](stack/dev-stack.md).
 
 ## Config files
 
 | File | Created by | Intended values |
 |------|-----------|-----------------|
-| `~/.config/openchamber/settings.json` | Repo template `tooling/openchamber.settings.json` via `openchamber-ctl.ps1 configure` (or the OpenChamber app itself) | `port: 7777`, `host: 0.0.0.0`, `autoStart: true` (defaults applied by the script when keys are absent) |
+| `~/.config/github-app/app.conf` | Repo template `tooling/machine/github-app.app.conf.template` via `tooling/machine/github-app-identity.sh` | `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, named `<installation>=<id>` entries (first = git default) — see [`machine/github-app-identity.md`](machine/github-app-identity.md) |
+| `~/.config/openchamber/settings.json` | Repo template `tooling/dev-stack/openchamber.settings.json` via `openchamber-ctl.ps1 configure` (or the OpenChamber app itself) | `port: 7777`, `host: 0.0.0.0`, `autoStart: true` (defaults applied by the script when keys are absent) |
 | `~/.paseo/config.json` | Paseo itself on first load (default is localhost-only) | `daemon.listen: "0.0.0.0:6767"`, `features.webUi.enabled: true`, `daemon.auth.password` (bcrypt) |
 | `%APPDATA%\Paseo\desktop-settings.json` | Paseo desktop app | `settings.daemon.manageBuiltInDaemon: false` — **advisory only**, never modified by the scripts |
 | `~/.config/openchamber/startup.ps1` + `launch.vbs` | `openchamber-ctl.ps1 configure` | Launch the OpenChamber server hidden at login (wrappers used by the Run key) |
@@ -95,12 +96,46 @@ steps, which is why `status` verifies them explicitly.
   `node ...\@getpaseo\cli\bin\paseo daemon start`).
   Details: [`paseo-headless-setup.md`](paseo-headless-setup.md).
 
-## Related docs in this folder
+## Layout — organized by domain
+
+Each domain folder is self-contained: docs sit next to their scripts.
+`bin/` holds only PATH entry points (wired by `bootstrap/bootstrap.sh` and
+`setup-environment.ps1`) that point into the domains.
+
+| Domain | Contents |
+|--------|----------|
+| [`stack/`](stack/) | Always-on dev services (OpenCode, OpenChamber, Paseo): supervisor + per-tool ctl scripts and docs, `openchamber.settings.json` template |
+| [`machine/`](machine/) | Provisioning this box: environment setup, PowerShell profile, GitHub App agent identity (`github-app-identity.sh`, token CLI, credential helper, config template) |
+| [`sources/`](sources/) | External reference repos: clone scripts, status/recording helpers |
+| [`skills/`](skills/) | Installing skill collections into the agent environment |
+| `bin/` | PATH entry points only (`dev-stack`) |
+
+## Related docs
+
+### `stack/`
 
 | Doc | Covers |
 |-----|--------|
-| [`dev-stack.md`](dev-stack.md) | Cross-tool supervisor commands, every status check, fresh-machine workflow |
-| [`openchamber-startup-setup.md`](openchamber-startup-setup.md) | OpenChamber lifecycle script (`openchamber-ctl.ps1`), settings, wrappers, OpenCode sidecar env vars |
-| [`opencode-ctl.md`](opencode-ctl.md) | OpenCode CLI lifecycle script (install/status/uninstall) |
-| [`paseo-ctl.md`](paseo-ctl.md) | Paseo CLI/daemon lifecycle script (install/status/start/stop/uninstall) |
-| [`paseo-headless-setup.md`](paseo-headless-setup.md) | Manual headless Paseo setup: listen address, password, scheduled task |
+| [`stack/dev-stack.md`](stack/dev-stack.md) | Cross-tool supervisor commands, every status check, fresh-machine workflow |
+| [`stack/opencode-ctl.md`](stack/opencode-ctl.md) | OpenCode CLI lifecycle script (install/status/uninstall) |
+| [`stack/openchamber-startup-setup.md`](stack/openchamber-startup-setup.md) | OpenChamber lifecycle script (`openchamber-ctl.ps1`), settings, wrappers, OpenCode sidecar env vars |
+| [`stack/paseo-ctl.md`](stack/paseo-ctl.md) | Paseo CLI/daemon lifecycle script (install/status/start/stop/uninstall) |
+| [`stack/paseo-headless-setup.md`](stack/paseo-headless-setup.md) | Manual headless Paseo setup: listen address, password, scheduled task |
+
+### `machine/`
+
+| Doc | Covers |
+|-----|--------|
+| [`machine/setup-environment.md`](machine/setup-environment.md) | Sets `HEYPOGI_ROOT` / `OPENCODE_CONFIG_DIR`, writes PowerShell profiles |
+| [`machine/github-app-identity.md`](machine/github-app-identity.md) | GitHub App as the agent GitHub/git identity: token CLI, credential helper, commit attribution |
+
+### `sources/` and `skills/`
+
+Doc–script pairs share filenames in those folders; each doc documents its own
+script. Entry points: [`sources/clone-ce-source.md`](sources/clone-ce-source.md),
+[`sources/clone-knowledge-source.md`](sources/clone-knowledge-source.md),
+[`sources/clone-opencode-source.md`](sources/clone-opencode-source.md),
+[`skills/install-skills.md`](skills/install-skills.md),
+[`skills/install-ce-skills.md`](skills/install-ce-skills.md),
+[`skills/install-knowledge-skills.md`](skills/install-knowledge-skills.md),
+[`skills/install-opencode-learn.md`](skills/install-opencode-learn.md).

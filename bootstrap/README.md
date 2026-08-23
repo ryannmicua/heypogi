@@ -8,7 +8,7 @@ Running `bootstrap.sh` on a machine will:
 
 1. **Verify prerequisites** — checks for Node.js 22+, npm, git, curl, Docker, uv
 2. **Install AI agent CLIs** — Claude Code (Anthropic), Codex CLI (OpenAI), GitHub CLI
-3. **Install the Dev Stack** — delegates to `tooling/scripts/dev-stack.sh install -a all`
+3. **Install the Dev Stack** — delegates to `tooling/dev-stack/dev-stack.sh install -a all`
    to install/update OpenCode, Paseo, and OpenChamber, so bootstrap never duplicates
    dev-stack's install logic
 4. **Configure heypogi environment** — sets `HEYPOGI_ROOT`, `OPENCODE_CONFIG_DIR`, installs skills
@@ -145,7 +145,7 @@ bootstrap/
 ├── README.md          # This file
 └── bootstrap.sh       # Main bootstrap script
 
-tooling/scripts/
+tooling/{stack,machine,sources,skills}/
 └── dev-stack.sh       # Service management (installed by bootstrap.sh)
 ```
 

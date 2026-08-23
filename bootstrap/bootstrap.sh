@@ -234,7 +234,7 @@ fi
 # ======================================================================
 # Step 3: Install the Dev Stack (OpenCode, OpenChamber, Paseo)
 # ======================================================================
-DEV_STACK_SRC="$HEYPOGI_ROOT/tooling/scripts/dev-stack.sh"
+DEV_STACK_SRC="$HEYPOGI_ROOT/tooling/dev-stack/dev-stack.sh"
 
 if [[ "$SKIP_PASEO" == false ]]; then
     echo ""
@@ -279,18 +279,18 @@ export PATH=\"\$HEYPOGI_ROOT/tooling/bin:\$PATH\"
     fi
     
     # Install skills if available
-    if [[ -f "$HEYPOGI_ROOT/tooling/scripts/install-skills.sh" ]]; then
+    if [[ -f "$HEYPOGI_ROOT/tooling/skills/install-skills.sh" ]]; then
         echo_info "Installing skills..."
-        run bash "$HEYPOGI_ROOT/tooling/scripts/install-skills.sh"
+        run bash "$HEYPOGI_ROOT/tooling/skills/install-skills.sh"
     fi
     
     # Symlink (not copy) dev-stack.sh into tooling/bin if it exists, so future
     # edits to dev-stack.sh are picked up immediately instead of silently
     # drifting from a stale one-time copy.
-    if [[ -f "$HEYPOGI_ROOT/tooling/scripts/dev-stack.sh" ]]; then
+    if [[ -f "$HEYPOGI_ROOT/tooling/dev-stack/dev-stack.sh" ]]; then
         mkdir -p "$HEYPOGI_ROOT/tooling/bin"
-        ln -sf ../scripts/dev-stack.sh "$HEYPOGI_ROOT/tooling/bin/dev-stack"
-        chmod +x "$HEYPOGI_ROOT/tooling/scripts/dev-stack.sh"
+        ln -sf ../dev-stack/dev-stack.sh "$HEYPOGI_ROOT/tooling/bin/dev-stack"
+        chmod +x "$HEYPOGI_ROOT/tooling/dev-stack/dev-stack.sh"
         echo_success "dev-stack script symlinked to tooling/bin"
     fi
     

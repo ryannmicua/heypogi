@@ -5,4 +5,4 @@ description: Use when installing or refreshing the Compound Engineering plugin s
 
 # ce-install-skills
 
-Read [tooling/install-ce-skills.md](../../../tooling/install-ce-skills.md) for the full install workflow and command usage.
+Read [tooling/skills/install-ce-skills.md](../../../tooling/skills/install-ce-skills.md) for the full install workflow and command usage.

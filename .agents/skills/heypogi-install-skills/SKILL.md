@@ -5,4 +5,4 @@ description: Use when installing or refreshing this repository's skills into the
 
 # heypogi-install-skills
 
-Read [tooling/install-skills.md](../../../tooling/install-skills.md) for the full install workflow and command usage.
+Read [tooling/skills/install-skills.md](../../../tooling/skills/install-skills.md) for the full install workflow and command usage.

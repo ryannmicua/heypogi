@@ -54,7 +54,7 @@ Plugin designed, coded, documented with 4 Diataxis types + HTML diagrams, commit
 ### A3: Install scripts
 - **Location**: `src/plugins/opencode-learn/install/`
 - **Files**: `install.ps1` (auto-detects plugin directory, adds to global opencode.json), `README.md`
-- Also: `tooling/install-opencode-learn.md` (repo root reference), `docs/plugins/opencode-learn.md` (pointer)
+- Also: `tooling/skills/install-opencode-learn.md` (repo root reference), `docs/plugins/opencode-learn.md` (pointer)
 
 ## DECISION
 
