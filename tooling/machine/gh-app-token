@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+# gh-app-token — mint/cache GitHub App installation tokens for agent use.
+#
+# Usage:
+#   gh-app-token <name>            print token for named installation (uses cache if fresh)
+#   gh-app-token --refresh <name>  force-mint a new token, replacing cache
+#   gh-app-token --list            list installations the app is installed on (live API)
+#   gh-app-token --clear [name]    delete cached token(s)
+#   gh-app-token --whoami          show app slug + bot user + suggested git attribution
+#
+# Requires: openssl, curl, jq. Config: ~/.config/github-app/app.conf
+# Canonical copy: heypogi repo tooling/bin/gh-app-token (installed by
+# tooling/machine/github-app-identity.sh). Edit there, re-run installer.
+set -euo pipefail
+
+CONF_DIR="$HOME/.config/github-app"
+CONF_FILE="$CONF_DIR/app.conf"
+KEY_FILE="$CONF_DIR/private-key.pem"
+CACHE_DIR="$HOME/.cache/github-app/tokens"
+API="https://api.github.com"
+
+die() { printf 'gh-app-token: %s\n' "$1" >&2; exit 1; }
+
+[[ -f "$CONF_FILE" ]] || die "missing $CONF_FILE — run tooling/machine/github-app-identity.sh to create it."
+# shellcheck disable=SC1090
+source "$CONF_FILE"
+[[ -n "${GITHUB_APP_ID:-}" ]] || die "GITHUB_APP_ID not set in $CONF_FILE"
+[[ -f "$KEY_FILE" ]] || die "missing private key at $KEY_FILE — place the app's .pem there, chmod 600."
+
+b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+
+mint_jwt() {
+  local now iat exp si sig
+  now=$(date +%s); iat=$((now - 30)); exp=$((now + 540))
+  si="$(printf '{"alg":"RS256","typ":"JWT"}' | b64url).$(printf '{"iat":%d,"exp":%d,"iss":%s}' "$iat" "$exp" "$(jq -Rn '$x' --arg x "$GITHUB_APP_ID")" | b64url)"
+  sig=$(printf '%s' "$si" | openssl dgst -sha256 -sign "$KEY_FILE" | b64url) || die "failed to sign JWT — is $KEY_FILE a valid RSA private key?"
+  printf '%s.%s' "$si" "$sig"
+}
+
+api() {
+  local method=$1 path=$2 jwt=$3
+  curl -fsS -X "$method" \
+    -H "Authorization: Bearer $jwt" \
+    -H "Accept: application/vnd.github+json" \
+    "$API$path" || die "GitHub API call failed ($method $path)"
+}
+
+install_id_for() {
+  local name=$1 id
+  id=$(grep -E "^${name}=" "$CONF_FILE" | head -1 | cut -d= -f2-)
+  [[ -n "$id" ]] || die "no installation named '$name' in $CONF_FILE (known names: $(known_names))"
+  printf '%s' "$id"
+}
+
+known_names() {
+  grep -vE '^\s*#|^\s*$|GITHUB_APP_' "$CONF_FILE" | cut -d= -f1 | tr '\n' ' '
+}
+
+first_installation_name() {
+  known_names | awk '{print $1}'
+}
+
+cache_path() { printf '%s/%s.tok' "$CACHE_DIR" "$1"; }
+
+cached_token() {
+  local name=$1 f; f=$(cache_path "$name")
+  [[ -f "$f" ]] || return 1
+  local exp now; exp=$(cut -d' ' -f1 "$f"); now=$(date +%s)
+  (( exp - 300 > now )) || return 1
+  cut -d' ' -f2 "$f"
+}
+
+store_token() {
+  local name=$1 json=$2 exp_epoch tok
+  exp_epoch=$(jq -r '.expires_at' <<<"$json" | date -u -f- +%s 2>/dev/null) || exp_epoch=$(( $(date +%s) + 3300 ))
+  tok=$(jq -r '.token // empty' <<<"$json")
+  [[ -n "$tok" ]] || die "token response missing .token — check app permissions/installation"
+  (umask 077 && printf '%s %s\n' "$exp_epoch" "$tok" > "$(cache_path "$name")")
+  printf '%s\n' "$tok"
+}
+
+get_token() {
+  local name=$1 force=${2:-no} json tok
+  if [[ "$force" != yes ]] && tok=$(cached_token "$name"); then printf '%s\n' "$tok"; return; fi
+  json=$(api POST "/app/installations/$(install_id_for "$name")/access_tokens" "$(mint_jwt)")
+  store_token "$name" "$json"
+}
+
+case "${1:-}" in
+  --list)
+    api GET /app/installations "$(mint_jwt)" |
+      jq -r '.[] | [.id, (.account.login // "?"), (.repository_selection // "?")] | @tsv'
+    ;;
+  --clear)
+    if [[ -n "${2:-}" ]]; then rm -f "$(cache_path "$2")"; else rm -rf "${CACHE_DIR:?}"/*; fi
+    ;;
+  --refresh)
+    [[ -n "${2:-}" ]] || die "--refresh needs an installation name"
+    get_token "$2" yes
+    ;;
+  --whoami)
+    tmp=$(mktemp)
+    api GET /app "$(mint_jwt)" > "$tmp"
+    slug=$(jq -r '.slug' "$tmp")
+    rm -f "$tmp"
+    uid=$(curl -fsS -g "https://api.github.com/users/${slug}%5Bbot%5D" | jq -r '.id // empty') || uid=""
+    echo "app:        $slug (App ID $GITHUB_APP_ID)"
+    echo "bot user:   ${slug}[bot] (id ${uid:-unknown})"
+    if [[ -n "$uid" ]]; then
+      echo "attributn:  git config user.name '${slug}[bot]' && git config user.email '${uid}+${slug}[bot]@users.noreply.github.com'"
+    fi
+    echo "installations: $(known_names)"
+    ;;
+  ""|--help|-h)
+    sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
+    ;;
+  -*)
+    die "unknown option $1 (try --help)"
+    ;;
+  *)
+    get_token "$1"
+    ;;
+esac

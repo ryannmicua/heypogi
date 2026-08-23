@@ -1,0 +1,17 @@
+# GitHub App identity config for agent use on this machine.
+# Installed by: tooling/machine/github-app-identity.sh
+# Template:     tooling/github-app.app.conf.template
+
+# Numeric App ID — github.com -> Settings -> Developer settings -> GitHub Apps
+# -> <app> -> About. NOT the Client ID (that starts with "Iv").
+GITHUB_APP_ID=__APP_ID__
+
+# App slug (shown on the app settings page; becomes <slug>[bot] as git author)
+GITHUB_APP_SLUG=__SLUG__
+
+# Named installations. Format: <name>=<installation_id>
+# Find IDs at the installation's Configure page URL:
+#   personal: https://github.com/settings/installations/<ID>
+#   org:      https://github.com/organizations/<org>/settings/installations/<ID>
+# The FIRST entry is the default used by git pushes (see git-credential-gh-app).
+__INSTALLATIONS__
