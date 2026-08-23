@@ -140,7 +140,9 @@ install_tools() {
 wire_git() {
   git config --global --unset-all credential.https://github.com.helper 2>/dev/null || true
   git config --global credential.https://github.com.helper ''
-  git config --global --add credential.https://github.com.helper "\"!$LOCAL_BIN/git-credential-gh-app\""
+  # NOTE: value must START with '!' (shell-command helper). No surrounding
+  # quotes — a leading '"' makes git treat the whole thing as a builtin name.
+  git config --global --add credential.https://github.com.helper "!$LOCAL_BIN/git-credential-gh-app"
   echo_success "git credential helper wired for https://github.com only"
 }
 
@@ -177,11 +179,22 @@ verify() {
   if [[ -n "$TEST_REPO" ]]; then
     echo_info "git ls-remote $TEST_REPO"
     if git ls-remote "$TEST_REPO" HEAD >/dev/null 2>&1; then
-      echo_success "git HTTPS auth works via credential helper"
+      echo_success "git HTTPS fetch works"
     else
       echo_err "git ls-remote failed"
       fail=1
     fi
+  fi
+
+  # Auth smoke test: credential fill must return a token via the helper.
+  # (ls-remote alone can pass on public repos without any credentials.)
+  echo_info "credential helper auth check (github.com)"
+  if out=$(printf 'protocol=https\nhost=github.com\n\n' | git credential fill 2>/dev/null) &&
+     grep -q '^password=ghs_' <<<"$out"; then
+    echo_success "credential helper returned an installation token (ghs_...)"
+  else
+    echo_err "credential helper did not produce a token"
+    fail=1
   fi
 
   (( fail == 0 )) || die "verification had failures"
