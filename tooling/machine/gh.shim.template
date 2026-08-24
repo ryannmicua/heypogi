@@ -35,7 +35,15 @@ if [[ -z "${GH_TOKEN:-}" && -z "${GITHUB_TOKEN:-}" ]]; then
         case "$a" in -*|*=*) continue ;; esac       # skip flags and --flag=value
         [[ "$a" == */* ]] || continue
         cand=${a%%/*}
-        if grep -qE "^${cand}=" "$conf"; then name=$cand; break; fi
+        ecand=$(printf '%s' "$cand" | sed 's/[.[\*^$()+?{|]/\\&/g')
+        if grep -qE "^${ecand}=" "$conf"; then name=$cand; break; fi
+        # Try second segment for gh api repos/ORG/REPO style routes
+        rest=${a#*/}
+        if [[ "$rest" == */* ]]; then
+          cand=${rest%%/*}
+          ecand=$(printf '%s' "$cand" | sed 's/[.[\*^$()+?{|]/\\&/g')
+          if grep -qE "^${ecand}=" "$conf"; then name=$cand; break; fi
+        fi
       done
     fi
     if [[ -z "$name" ]]; then
