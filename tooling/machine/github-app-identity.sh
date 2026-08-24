@@ -111,9 +111,6 @@ install_conf() {
   done
   inst_block=$(printf '%s\n' "${INSTALLATIONS[@]}")
 
-  local inst_block
-  inst_block=$(printf '%s\n' "${INSTALLATIONS[@]}")
-
   local tmp="$CONF_FILE.tmp.$$"
   sed -e "s|__APP_ID__|$APP_ID|g" -e "s|__SLUG__|$SLUG|g" "$TEMPLATE" \
     | awk -v inst="$inst_block" '/^__INSTALLATIONS__$/{print inst; next} {print}' > "$tmp"

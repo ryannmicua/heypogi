@@ -99,15 +99,12 @@ case "${1:-}" in
     get_token "$2" yes
     ;;
   --whoami)
-    tmp=$(mktemp)
-    api GET /app "$(mint_jwt)" > "$tmp"
-    slug=$(jq -r '.slug' "$tmp")
-    rm -f "$tmp"
+    slug=$(api GET /app "$(mint_jwt)" | jq -r '.slug')
     uid=$(curl -fsS -g "https://api.github.com/users/${slug}%5Bbot%5D" | jq -r '.id // empty') || uid=""
     echo "app:        $slug (App ID $GITHUB_APP_ID)"
     echo "bot user:   ${slug}[bot] (id ${uid:-unknown})"
     if [[ -n "$uid" ]]; then
-      echo "attributn:  git config user.name '${slug}[bot]' && git config user.email '${uid}+${slug}[bot]@users.noreply.github.com'"
+      echo "attribute:  git config user.name '${slug}[bot]' && git config user.email '${uid}+${slug}[bot]@users.noreply.github.com'"
     fi
     echo "installations: $(known_names)"
     ;;
