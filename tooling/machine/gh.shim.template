@@ -12,7 +12,9 @@
 #   1. GH_APP_INSTALLATION env var        (per-command or per-repo export)
 #   2. org in a command-line arg (e.g. `gh repo view ORG/repo`), if it
 #      matches a named installation
-#   3. first installation listed in app.conf
+#   3. org of the current repo's origin remote (covers commands like
+#      `gh pr view` that infer the repo from the working directory)
+#   4. first installation listed in app.conf
 #
 # Escape hatch: export GH_TOKEN or GITHUB_TOKEN yourself and this shim runs
 # the real gh untouched. Degrades gracefully: with no app.conf/token yet,
@@ -45,6 +47,26 @@ if [[ -z "${GH_TOKEN:-}" && -z "${GITHUB_TOKEN:-}" ]]; then
           if grep -qE "^${ecand}=" "$conf"; then name=$cand; break; fi
         fi
       done
+    fi
+    # No org on the command line: infer from the current repo's origin
+    # remote so directory-scoped commands (gh pr view/list, run watch...)
+    # pick the installation that actually owns the repo.
+    if [[ -z "$name" ]]; then
+      url=$(git remote get-url origin 2>/dev/null) || url=""
+      if [[ -n "$url" ]]; then
+        case "$url" in
+          git@github.com:*)                         path=${url#git@github.com:} ;;
+          ssh://git@github.com/*)                   path=${url#ssh://git@github.com/} ;;
+          http://github.com/*|https://github.com/*) path=${url#*://github.com/} ;;
+          *)                                        path="" ;;
+        esac
+        path=${path%.git}
+        cand=${path%%/*}
+        if [[ -n "$cand" && "$cand" != "$path" ]]; then
+          ecand=$(printf '%s' "$cand" | sed 's/[.[\*^$()+?{|]/\\&/g')
+          if grep -qE "^${ecand}=" "$conf"; then name=$cand; fi
+        fi
+      fi
     fi
     if [[ -z "$name" ]]; then
       name=$(grep -vE '^\s*#|^\s*$|GITHUB_APP_' "$conf" | head -1 | cut -d= -f1)

@@ -77,6 +77,20 @@ It ends with a verification pass and prints `ALL VERIFIED` when live.
 Canonical copies of the tools live in this repo in this folder (`tooling/machine/`); edit
 there and re-run the installer to update a machine.
 
+### How an installation is picked
+
+Both the `gh` shim and the git credential helper choose which named
+installation to mint a token for, highest match wins:
+
+1. `GH_APP_INSTALLATION` env var (per-command or per-repo export)
+2. org named on the command line or in the request path (`gh repo view ORG/repo`, git push URL)
+3. org of the current repo's `origin` remote (shim only — covers commands like
+   `gh pr view` that infer the repo from the working directory)
+4. first installation listed in `app.conf`
+
+Name installations after their org/login so steps 2–3 resolve; step 4 is why
+the **first** entry should be the account used most without a repo context.
+
 ## Verify
 
 ```bash
@@ -134,6 +148,13 @@ and confirm the app has Contents read/write.
 tokens are scoped by app permissions, not OAuth scopes. Repo/API operations
 covered by the app's permissions work fine (e.g. `GET /user` 403s by design;
 repo/PR endpoints are what tools like Paseo need).
+
+**`GraphQL: Could not resolve to a Repository with the name 'ORG/...'`** —
+the wrong installation was picked for the repo. Happens on older shims for
+directory-inferred commands (`gh pr view`, `gh pr list`, `gh run watch`) when
+the repo's org is not the first entry in `app.conf`. Fix: update to a shim
+that resolves the org from `origin` (re-run the installer), or export
+`GH_APP_INSTALLATION=<org>` per-repo.
 
 **`gh` shim not taking effect for a tool** — the caller must resolve `gh`
 via `$PATH` with `~/.local/bin` first (`type -a gh` to check). Tools pinned
