@@ -105,7 +105,7 @@ Each domain folder is self-contained: docs sit next to their scripts.
 | Domain | Contents |
 |--------|----------|
 | [`stack/`](stack/) | Always-on dev services (OpenCode, OpenChamber, Paseo): supervisor + per-tool ctl scripts and docs, `openchamber.settings.json` template |
-| [`machine/`](machine/) | Provisioning this box: environment setup, PowerShell profile, GitHub App agent identity (`github-app-identity.sh`, token CLI, credential helper, config template) |
+| [`machine/`](machine/) | Provisioning this box: environment setup, Codex CLI installation, PowerShell profile, GitHub App agent identity (`github-app-identity.sh`, token CLI, credential helper, config template) |
 | [`sources/`](sources/) | External reference repos: clone scripts, status/recording helpers |
 | [`skills/`](skills/) | Installing skill collections into the agent environment |
 | `bin/` | PATH entry points only (`dev-stack`) |
@@ -127,6 +127,7 @@ Each domain folder is self-contained: docs sit next to their scripts.
 | Doc | Covers |
 |-----|--------|
 | [`machine/setup-environment.md`](machine/setup-environment.md) | Sets `HEYPOGI_ROOT` / `OPENCODE_CONFIG_DIR`, writes PowerShell profiles |
+| [`machine/install-codex-cli.md`](machine/install-codex-cli.md) | Installs/verifies Codex CLI and Linux Bubblewrap/AppArmor prerequisites |
 | [`machine/github-app-identity.md`](machine/github-app-identity.md) | GitHub App as the agent GitHub/git identity: token CLI, credential helper, commit attribution |
 
 ### `sources/` and `skills/`

@@ -5,8 +5,9 @@
 ## First-time setup
 
 1. **[`tooling/machine/setup-environment.md`](tooling/machine/setup-environment.md)** — sets `HEYPOGI_ROOT` and `OPENCODE_CONFIG_DIR`, writes PowerShell profile
-2. **[`tooling/sources/clone-opencode-source.md`](tooling/sources/clone-opencode-source.md)** — clones OpenCode source for the `@opencode` subagent
-3. **[`tooling/skills/install-skills.md`](tooling/skills/install-skills.md)** — installs local skills into your agent environment
+2. **[`tooling/machine/install-codex-cli.md`](tooling/machine/install-codex-cli.md)** — installs and verifies Codex CLI plus Linux sandbox prerequisites
+3. **[`tooling/sources/clone-opencode-source.md`](tooling/sources/clone-opencode-source.md)** — clones OpenCode source for the `@opencode` subagent
+4. **[`tooling/skills/install-skills.md`](tooling/skills/install-skills.md)** — installs local skills into your agent environment
 
 ## Plugin setup
 
