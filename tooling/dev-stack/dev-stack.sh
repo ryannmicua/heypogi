@@ -140,6 +140,29 @@ version_gte() {
     printf '%s\n%s' "$v2" "$v1" | sort -V -C
 }
 
+# npm install -g wrapper: retries with sudo when the global prefix is not writable
+npm_install_global() {
+    local pkg="$1"
+    local output exit_code
+    local npm_prefix
+    npm_prefix=$(npm config get prefix 2>/dev/null || echo "/usr/local")
+
+    output=$(npm install -g "$pkg" 2>&1) && { echo "$output"; return 0; }
+    exit_code=$?
+
+    # Only escalate to sudo if the global prefix's node_modules is not writable.
+    # This avoids false triggers from "permission denied" text in package
+    # lifecycle scripts (security fix for review finding #2).
+    if [[ ! -w "$npm_prefix/lib/node_modules" ]]; then
+        echo "$output"
+        echo_warn "Need root permissions. Retrying with sudo..."
+        sudo npm install -g "$pkg"
+    else
+        echo "$output"
+        return $exit_code
+    fi
+}
+
 add_check() {
     local service="$1" check="$2" ok="$3" detail="${4:-}"
     local status="ok"
@@ -419,11 +442,11 @@ do_install() {
                 if command -v opencode &>/dev/null; then
                     curl -fsSL https://opencode.ai/install | bash
                 else
-                    npm install -g "$PKG_OPENCODE"
+                    npm_install_global "$PKG_OPENCODE"
                 fi
                 ;;
             openchamber)
-                npm install -g "$PKG_OPENCHAMBER"
+                npm_install_global "$PKG_OPENCHAMBER"
                 ;;
             paseo)
                 # paseo_tag was computed above (from comparing the "latest"
@@ -432,9 +455,9 @@ do_install() {
                 # "latest" resolves to, even when a newer beta was detected
                 # and reported in the update message above.
                 if [[ "${paseo_tag:-latest}" == "beta" ]]; then
-                    npm install -g "${PKG_PASEO}@beta"
+                    npm_install_global "${PKG_PASEO}@beta"
                 else
-                    npm install -g "$PKG_PASEO"
+                    npm_install_global "$PKG_PASEO"
                 fi
                 ;;
         esac
