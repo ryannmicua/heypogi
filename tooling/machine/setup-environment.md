@@ -1,9 +1,33 @@
 # Setup Environment Variables
 
-Sets `HEYPOGI_ROOT` and `OPENCODE_CONFIG_DIR` in the Windows registry (User scope)
-and PowerShell profile, and points OpenCode at this repo's config directory.
+Sets `HEYPOGI_ROOT` and `OPENCODE_CONFIG_DIR` so OpenCode picks up this repo's
+custom config from `dotfiles/opencode/`. The method depends on your platform.
 
-## Install
+## Linux / macOS
+
+Add these lines to `~/.bashrc` (or `~/.profile` for login shells):
+
+```bash
+export HEYPOGI_ROOT="<repo_root>"
+export OPENCODE_CONFIG_DIR="<repo_root>/dotfiles/opencode"
+export PATH="$HEYPOGI_ROOT/tooling/bin:$PATH"
+```
+
+Then reload:
+
+```bash
+source ~/.bashrc
+```
+
+Verify:
+
+```bash
+echo "HEYPOGI_ROOT=$HEYPOGI_ROOT"
+echo "OPENCODE_CONFIG_DIR=$OPENCODE_CONFIG_DIR"
+opencode debug config
+```
+
+## Windows (PowerShell)
 
 Run from the repo root:
 
