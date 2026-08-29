@@ -11,7 +11,7 @@ execution: code
 ## Goal Capsule
 
 - **Objective:** A single source file (`dotfiles/instructions/RULES.md`) is copied to each installed AI coding agent's expected global instructions location, with detection of which agents are present, an interactive picker for the user to select targets, diff preview before overwriting, automatic backups, colored status output, and safe handling of existing files.
-- **Means:** Bash and PowerShell scripts that detect agents via `command -v`, present an interactive checklist (`--interactive`) or act on all detected agents by default, show diffs before overwrite prompts, back up existing files, support `--status`/`--dry-run`/`--remove`/`--source`/`--json` modes, copy the source to per-agent destinations, and validate source input. OpenCode uses a config reference instead of a copy. (KTD1, KTD2, KTD3, KTD4)
+- **Means:** Bash and PowerShell scripts that detect agents via `command -v`, default to an interactive scan-then-select flow, offer `--auto` for non-interactive batch install on all detected agents, show diffs before overwrite prompts, back up existing files, support `--status`/`--dry-run`/`--remove`/`--source`/`--json` modes, copy the source to per-agent destinations, and validate source input. OpenCode uses a config reference instead of a copy. (KTD1, KTD2, KTD3, KTD4)
 - **Execution profile:** Lightweight — 3 implementation units, no external dependencies, no cross-system impact.
 - **Stop conditions:** All detected agents have rules installed or removed per user intent; OpenCode config references the source; scripts are documented.
 
@@ -19,7 +19,7 @@ execution: code
 
 ### Summary
 
-A cross-platform install script copies a source rules file to each AI coding agent's global instructions file. Each agent expects a different filename at a different path. The script auto-detects which agents are installed (including version display) and only targets those. An `--interactive` mode presents a scan-then-select checklist so the user can enable or disable individual agents before proceeding. Before overwriting, the script shows a diff and offers one-click apply-to-all. Existing files are backed up automatically. Additional modes include `--status` (read-only state overview), `--dry-run` (preview without changes), `--remove` (uninstall instructions), `--source` (custom source file), and `--json` (machine-readable output). The source file is validated before any operations begin. Colored output highlights status at a glance.
+A cross-platform install script copies a source rules file to each AI coding agent's global instructions file. Each agent expects a different filename at a different path. The script auto-detects which agents are installed (including version display) and defaults to an interactive scan-then-select flow so the user can enable or disable individual agents before proceeding. An `--auto` flag skips the interactive selection and installs to all detected agents (or force-specified agents) without prompts. Before overwriting, the script shows a diff and offers one-click apply-to-all. Existing files are backed up automatically. Additional modes include `--status` (read-only state overview), `--dry-run` (preview without changes), `--remove` (uninstall instructions), `--source` (custom source file), and `--json` (machine-readable output). The source file is validated before any operations begin. Colored output highlights status at a glance.
 
 ### Problem Frame
 
@@ -52,14 +52,14 @@ The user operates multiple AI coding agents (Codex, Claude Code, agy/Antigravity
 **Force Flags**
 
 - R14. `--codex`, `--claude`, `--agy`, `--opencode` flags force-install for specific agents even if not detected.
-- R15. Without force flags, only detected agents are targeted.
+- R15. In `--auto` mode, only detected agents (or force-flagged agents) are targeted.
 
 **Interactive Mode**
 
-- R16. The `--interactive` flag enables a two-phase scan-then-select flow: first detect all supported agents and show their status, then present a checklist for the user to enable/disable before proceeding.
+- R16. By default, the script runs a two-phase scan-then-select flow: first detect all supported agents and show their status, then present a checklist for the user to enable/disable before proceeding. The `--auto` flag skips this flow and targets all detected agents directly.
 - R17. The checklist shows each agent name, its detection status (installed / not found), and the current selection state. Detected agents default to selected; non-detected default to deselected.
 - R18. The user confirms the selection to proceed, or cancels to abort. Only selected agents are targeted.
-- R19. Force flags (`--codex`, `--claude`, etc.) pre-select their agent in the checklist regardless of detection status. Interactive mode still runs; the forced agent is just pre-checked.
+- R19. Force flags (`--codex`, `--claude`, etc.) pre-select their agent in the checklist regardless of detection status. The default scan-then-select flow still runs; the forced agent is just pre-checked.
 
 **Output**
 
@@ -104,7 +104,7 @@ The user operates multiple AI coding agents (Codex, Claude Code, agy/Antigravity
 **JSON Output**
 
 - R33. The `--json` flag emits a JSON object to stdout with per-agent results: `{ "agents": [{ "name": "codex", "detected": true, "version": "0.98.0", "action": "installed", "destination": "~/.agents/AGENTS.md" }, ...] }`.
-- R34. `--json` suppresses all other output (no colored tables, no prompts). It is incompatible with `--interactive` (error if both are passed).
+- R34. `--json` suppresses all other output (no colored tables, no prompts). It is incompatible with the default interactive mode (error if both are attempted); use `--json --auto` for machine-readable output without prompts.
 
 **Agent Version Display**
 
@@ -117,7 +117,7 @@ The user operates multiple AI coding agents (Codex, Claude Code, agy/Antigravity
 - PowerShell script (`tooling/instructions/install-instructions.ps1`)
 - OpenCode config modification (`dotfiles/opencode/opencode.json`)
 - Documentation (`tooling/instructions/README.md`)
-- `--status`, `--dry-run`, `--remove`, `--source`, `--json`, `--interactive` modes
+- `--status`, `--dry-run`, `--remove`, `--source`, `--json`, `--auto` modes
 - Diff preview, apply-to-all, backup, colored output, source validation, version display
 
 **Out of scope:**
@@ -126,7 +126,7 @@ The user operates multiple AI coding agents (Codex, Claude Code, agy/Antigravity
 - Symlink support (user chose copy)
 - Agent-specific content differentiation (one source file for all)
 - Multiple backup rotation (only most recent `.bak` is kept)
-- Interactive mode combined with `--json` (mutually exclusive)
+- Interactive mode combined with `--json` (mutually exclusive; use `--json --auto` instead)
 
 ## Planning Contract
 
@@ -158,18 +158,19 @@ The user operates multiple AI coding agents (Codex, Claude Code, agy/Antigravity
   - Define agent table: name, binary, source path, destination path.
   - Source validation (R31): check source exists, is a file, is non-empty before any operations. Default source is `dotfiles/instructions/RULES.md`; `--source` overrides (R32).
   - Colored output (R30): detect TTY and `NO_COLOR`; define `RED`, `GREEN`, `YELLOW`, `CYAN`, `RESET` helpers; disable when not TTY or `NO_COLOR` set.
-  - Mode dispatch: `--status` → status_only(); `--dry-run` → dry_run(); `--remove` → remove_mode(); default → install_mode().
+  - Mode dispatch: `--status` → status_only(); `--dry-run` → dry_run(); `--remove` → remove_mode(); `--auto` → install_mode(); default → interactive_mode().
   - `--status` (R21, R35): for each agent, run detection, get version via `<binary> --version`, check destination state, print color-coded table. Exit 0.
   - `--dry-run` (R22): same as install_mode but replace `cp` with echo of what would happen; replace prompts with diff preview. Exit 0.
   - `--remove` (R27-R29): for each agent, check destination exists, prompt confirmation (or `--force` to skip), delete file. Emit results.
-  - `--json` (R33-R34): collect results into a JSON structure (using `printf` and heredoc, no `jq` dependency); print at end; suppress all other output. Error if combined with `--interactive`.
+  - `--json` (R33-R34): collect results into a JSON structure (using `printf` and heredoc, no `jq` dependency); print at end; suppress all other output. Error if combined with default interactive mode (use `--json --auto` instead).
   - Install mode:
     - For each agent: check `command -v` (or force flag), check destination state.
     - If destination differs (R12, R23): show unified diff (limited to 50 lines via `diff --color=auto`), then prompt `[a]pply to all, [o]verwrite, [s]kip, [q]uit` (R24).
     - Before overwrite (R25-R26): save existing as `<dest>.bak`.
     - If destination missing: copy silently, report "installed".
     - If identical: skip, report "up to date".
-  - `--interactive` (R16-R19):
+  - `--auto` (non-interactive): same as install_mode but skips the interactive selection; targets all detected agents (or force-flagged agents) directly.
+  - Default (interactive mode):
     - Phase 1 — Scan: run detection + version on all agents, print color-coded table with name, version, status, default selection.
     - Phase 2 — Select: prompt user to toggle agents by number or confirm defaults.
     - Respect force flags as pre-selections (R19).
@@ -195,15 +196,18 @@ The user operates multiple AI coding agents (Codex, Claude Code, agy/Antigravity
   - `--remove` with confirmation → deletes destination files.
   - `--remove --force` → deletes without confirmation.
   - `--json` → emits valid JSON, no other output.
-  - `--json --interactive` → error, mutually exclusive.
-  - `--interactive` with detected agents → shows table, defaults detected to selected, proceeds on confirm.
-  - `--interactive` with no agents detected → shows empty selection, user cancels, exits 0.
-  - `--interactive` with force flag → forced agent pre-selected even if not detected.
-  - `--interactive` user deselects all → proceeds with nothing, reports "no agents selected".
+  - `--json --auto` → emits valid JSON, no other output.
+  - `--json` with default interactive → error, mutually exclusive.
+  - Default (interactive) with detected agents → shows table, defaults detected to selected, proceeds on confirm.
+  - Default (interactive) with no agents detected → shows empty selection, user cancels, exits 0.
+  - Default (interactive) with force flag → forced agent pre-selected even if not detected.
+  - Default (interactive) user deselects all → proceeds with nothing, reports "no agents selected".
+  - `--auto` with detected agents → installs to all detected agents without prompts.
+  - `--auto` with force flags → installs to forced agents regardless of detection.
   - Backup: existing `.bak` overwritten silently on second run.
   - Color: output is colored when TTY, plain when piped or `NO_COLOR` set.
   - Version: `<binary> --version` failure → version shows "unknown".
-- **Verification:** Run `bash tooling/instructions/install-instructions.sh --help` shows full usage. Run `--status` with no agents installed shows empty table. Run `--interactive` and verify table output and selection prompt. Run `--json` and validate output with `python3 -c "import json,sys; json.load(sys.stdin)"`. Manually place a test file, run script, verify diff and backup behavior.
+- **Verification:** Run `bash tooling/instructions/install-instructions.sh --help` shows full usage. Run `--status` with no agents installed shows empty table. Run default (no flags) and verify table output and selection prompt. Run `--auto` and verify non-interactive install. Run `--json --auto` and validate output with `python3 -c "import json,sys; json.load(sys.stdin)"`. Manually place a test file, run script, verify diff and backup behavior.
 
 ### U2. PowerShell install script
 
@@ -240,7 +244,7 @@ The user operates multiple AI coding agents (Codex, Claude Code, agy/Antigravity
 - **Files:** `dotfiles/opencode/opencode.json`, `tooling/instructions/README.md`
 - **Approach:**
   - Add `"instructions": ["../instructions/RULES.md"]` to the root of `opencode.json`.
-  - README documents: what the system does, the agent-to-destination mapping, all modes (`--status`, `--dry-run`, `--remove`, `--interactive`, `--source`, `--json`), usage examples for both scripts, how to update RULES.md, backup behavior, colored output, and the `NO_COLOR` convention.
+  - README documents: what the system does, the agent-to-destination mapping, all modes (`--status`, `--dry-run`, `--remove`, `--auto`, `--source`, `--json`), default interactive behavior, usage examples for both scripts, how to update RULES.md, backup behavior, colored output, and the `NO_COLOR` convention.
 - **Test scenarios:**
   - `opencode.json` remains valid JSON after edit.
   - README accurately describes all modes and the mapping.
@@ -252,9 +256,10 @@ The user operates multiple AI coding agents (Codex, Claude Code, agy/Antigravity
 - `bash tooling/instructions/install-instructions.sh --status` shows detection table with versions, no modifications.
 - `bash tooling/instructions/install-instructions.sh --dry-run` shows preview of all actions, no modifications.
 - `bash tooling/instructions/install-instructions.sh` runs without error when no agents are installed.
-- `bash tooling/instructions/install-instructions.sh --interactive` shows detection table and selection prompt.
+- `bash tooling/instructions/install-instructions.sh` (no flags) shows detection table and selection prompt (interactive by default).
+- `bash tooling/instructions/install-instructions.sh --auto` runs non-interactive install on all detected agents.
 - `bash tooling/instructions/install-instructions.sh --json` emits valid JSON (validate with `python3 -c "import json,sys; json.load(sys.stdin)"`).
-- `bash tooling/instructions/install-instructions.sh --json --interactive` errors as mutually exclusive.
+- `bash tooling/instructions/install-instructions.sh --json --auto` emits valid JSON without prompts.
 - `bash tooling/instructions/install-instructions.sh --source /nonexistent` errors with source validation message.
 - Manual test: create a temp destination file, run script, verify diff is shown, backup is created, prompt appears.
 - `python3 -c "import json; json.load(open('dotfiles/opencode/opencode.json'))"` passes.
@@ -267,8 +272,9 @@ The user operates multiple AI coding agents (Codex, Claude Code, agy/Antigravity
 - `--status` shows color-coded table with agent versions and file state.
 - `--dry-run` previews all actions without modification.
 - `--remove` deletes installed instructions with confirmation (or `--force`).
-- `--interactive` mode shows a detection table and selection prompt in both bash and PowerShell.
-- `--json` emits valid, machine-readable output; incompatible with `--interactive`.
+- Default mode (no flags) shows a detection table and selection prompt in both bash and PowerShell.
+- `--auto` performs non-interactive install to all detected or force-flagged agents.
+- `--json` emits valid, machine-readable output; incompatible with default interactive mode; works with `--auto`.
 - `--source` overrides the default source file.
 - Force flags pre-select in interactive mode.
 - Diff is shown before every overwrite prompt; apply-to-all works.
