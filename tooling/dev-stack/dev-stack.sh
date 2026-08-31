@@ -513,7 +513,7 @@ do_start_app() {
             if ! check_port "$PASEO_PORT"; then
                 echo_info "Starting Paseo daemon..."
                 if command -v systemctl &>/dev/null && systemctl list-unit-files paseo.service &>/dev/null 2>&1; then
-                    systemctl start paseo.service
+                    sudo systemctl start paseo.service
                 else
                     nohup paseo daemon start > /dev/null 2>&1 &
                     sleep 2
@@ -556,7 +556,7 @@ do_stop_app() {
             if check_port "$PASEO_PORT"; then
                 echo_info "Stopping Paseo daemon..."
                 if command -v systemctl &>/dev/null && systemctl list-unit-files paseo.service &>/dev/null 2>&1; then
-                    systemctl stop paseo.service
+                    sudo systemctl stop paseo.service
                 else
                     paseo daemon stop 2>/dev/null || true
                 fi
@@ -609,7 +609,7 @@ do_fix() {
             if [[ "$FORCE" == true ]] || [[ "$QUIET" == true ]]; then
                 sed -i 's/"listen".*/"listen": "0.0.0.0:'"$PASEO_PORT"'",/' "$paseo_cfg"
                 echo_info "Fixed listen address. Restarting Paseo..."
-                systemctl restart paseo.service 2>/dev/null || paseo daemon restart 2>/dev/null || true
+                sudo systemctl restart paseo.service 2>/dev/null || paseo daemon restart 2>/dev/null || true
             fi
         fi
     fi
@@ -639,24 +639,24 @@ do_startup() {
                 case "$verb" in
                     install)
                         if [[ -f "$SCRIPT_DIR/../../scripts/systemd/paseo.service" ]]; then
-                            cp "$SCRIPT_DIR/../../scripts/systemd/paseo.service" /etc/systemd/system/
-                            systemctl daemon-reload
-                            systemctl enable paseo.service
+                            sudo cp "$SCRIPT_DIR/../../scripts/systemd/paseo.service" /etc/systemd/system/
+                            sudo systemctl daemon-reload
+                            sudo systemctl enable paseo.service
                             echo_success "Paseo systemd service installed"
                         else
                             echo_warn "paseo.service template not found"
                         fi
                         ;;
                     enable)
-                        systemctl enable paseo.service 2>/dev/null && echo_success "Enabled paseo.service" || echo_warn "Could not enable paseo.service"
+                        sudo systemctl enable paseo.service 2>/dev/null && echo_success "Enabled paseo.service" || echo_warn "Could not enable paseo.service"
                         ;;
                     disable)
-                        systemctl disable paseo.service 2>/dev/null && echo_success "Disabled paseo.service" || echo_warn "Could not disable paseo.service"
+                        sudo systemctl disable paseo.service 2>/dev/null && echo_success "Disabled paseo.service" || echo_warn "Could not disable paseo.service"
                         ;;
                     uninstall)
-                        systemctl disable paseo.service 2>/dev/null || true
-                        rm -f /etc/systemd/system/paseo.service
-                        systemctl daemon-reload
+                        sudo systemctl disable paseo.service 2>/dev/null || true
+                        sudo rm -f /etc/systemd/system/paseo.service
+                        sudo systemctl daemon-reload
                         echo_success "Paseo systemd service removed"
                         ;;
                 esac
