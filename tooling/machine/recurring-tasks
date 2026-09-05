@@ -1,0 +1,207 @@
+#!/usr/bin/env bash
+# recurring-tasks - Monitor all recurring tasks on this machine (read-only)
+# Discovers: cron jobs, Paseo schedules, systemd timers, at jobs
+set -euo pipefail
+
+BOLD='\033[1m'
+DIM='\033[2m'
+CYAN='\033[36m'
+RESET='\033[0m'
+
+found=0
+
+header() {
+  echo ""
+  echo -e "${BOLD}${CYAN}=== $1 ===${RESET}"
+  echo ""
+}
+
+row() {
+  local type="$1" name="$2" schedule="$3" target="$4"
+  printf "  ${BOLD}%-10s${RESET} %-30s ${DIM}%-20s${RESET} %s\n" "$type" "$name" "$schedule" "$target"
+}
+
+# --- CRON ---
+collect_cron() {
+  header "Cron Jobs"
+
+  # user crontab
+  if crontab -l 2>/dev/null | grep -v '^\s*#' | grep -v '^\s*$' | read -r _; then
+    echo -e "  ${DIM}source: user crontab${RESET}"
+    while IFS= read -r line; do
+      [[ "$line" =~ ^[[:space:]]*# ]] && continue
+      [[ -z "${line// /}" ]] && continue
+      schedule=$(echo "$line" | awk '{printf "%s %s %s %s %s", $1, $2, $3, $4, $5}')
+      command=$(echo "$line" | awk '{for(i=6;i<=NF;i++) printf "%s ", $i; print ""}' | sed 's/ *$//')
+      row "CRON" "(user)" "$schedule" "$command"
+      ((found++)) || true
+    done < <(crontab -l 2>/dev/null)
+    echo ""
+  fi
+
+  # /etc/cron.d/
+  if [ -d /etc/cron.d ]; then
+    for f in /etc/cron.d/*; do
+      [ -f "$f" ] || continue
+      while IFS= read -r line; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// /}" ]] && continue
+        schedule=$(echo "$line" | awk '{printf "%s %s %s %s %s", $1, $2, $3, $4, $5}')
+        command=$(echo "$line" | awk '{for(i=6;i<=NF;i++) printf "%s ", $i; print ""}' | sed 's/ *$//')
+        row "CRON" "$(basename "$f")" "$schedule" "$command"
+        ((found++)) || true
+      done < "$f"
+    done
+  fi
+
+  # /etc/crontab
+  if [ -f /etc/crontab ]; then
+    while IFS= read -r line; do
+      [[ "$line" =~ ^[[:space:]]*# ]] && continue
+      [[ -z "${line// /}" ]] && continue
+      # skip variable assignments like SHELL=/bin/sh
+      [[ "$line" =~ ^[A-Z_]+= ]] && continue
+      # /etc/crontab has an extra USER field
+      schedule=$(echo "$line" | awk '{printf "%s %s %s %s %s", $1, $2, $3, $4, $5}')
+      user=$(echo "$line" | awk '{print $6}')
+      command=$(echo "$line" | awk '{for(i=7;i<=NF;i++) printf "%s ", $i; print ""}' | sed 's/ *$//')
+      row "CRON" "(system/$user)" "$schedule" "$command"
+      ((found++)) || true
+    done < <(grep -v '^#' /etc/crontab | grep -v '^\s*$')
+  fi
+}
+
+# --- PASEO ---
+collect_paseo() {
+  header "Paseo Schedules"
+
+  if ! command -v paseo &>/dev/null; then
+    echo -e "  ${DIM}paseo not found, skipping${RESET}"
+    return
+  fi
+
+  local output
+  output=$(paseo_list_schedules 2>/dev/null) || {
+    echo -e "  ${DIM}no schedules found or daemon not running${RESET}"
+    return
+  }
+
+  # parse JSON array of schedule objects
+  local count
+  count=$(echo "$output" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+print(len(data))
+" 2>/dev/null) || { echo -e "  ${DIM}could not parse paseo output${RESET}"; return; }
+
+  if [ "$count" -eq 0 ]; then
+    echo -e "  ${DIM}no schedules configured${RESET}"
+    return
+  fi
+
+  echo "$output" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for s in data:
+    sid = s.get('id', '?')
+    name = s.get('name', sid)
+    cron = s.get('cadence', {}).get('expression', '?')
+    tz = s.get('cadence', {}).get('timezone', '')
+    status = s.get('status', '?')
+    prompt = s.get('prompt', '')[:60]
+    if len(s.get('prompt', '')) > 60:
+        prompt += '...'
+    label = f'{name} ({sid[:8]})'
+    schedule = f'{cron} {tz}'.strip()
+    print(f'  PASEO     {label:<30} {schedule:<20} [{status}] {prompt}')
+" 2>/dev/null
+
+  found=$((found + count))
+  echo ""
+}
+
+# --- SYSTEMD TIMERS ---
+collect_systemd() {
+  header "Systemd Timers"
+
+  if ! command -v systemctl &>/dev/null; then
+    echo -e "  ${DIM}systemctl not found, skipping${RESET}"
+    return
+  fi
+
+  local output
+  output=$(systemctl list-timers --all --no-pager --no-legend 2>/dev/null) || {
+    echo -e "  ${DIM}could not list timers${RESET}"
+    return
+  }
+
+  if [ -z "$output" ]; then
+    echo -e "  ${DIM}no timers found${RESET}"
+    return
+  fi
+
+  local count
+  count=$(echo "$output" | grep -c '\.timer' 2>/dev/null) || count=0
+
+  echo "$output" | python3 -c "
+import sys, re
+for line in sys.stdin:
+    line = line.strip()
+    if not line or 'UNIT' in line and 'ACTIVATES' in line:
+        continue
+    parts = line.split()
+    if len(parts) < 6:
+        continue
+    timer = parts[-2]
+    activates = parts[-1]
+    for i, p in enumerate(parts[1:], 1):
+        if re.match(r'^(\d+(min|h|s|day|mon)|-)$', p) or (p.endswith('min') or p.endswith('s') or p.endswith('h') or p.endswith('day') or p == '-'):
+            left = p
+            break
+    else:
+        left = '?'
+    print(f'  SYSTEMD   {timer:<30} {left:<20} {activates}')
+" 2>/dev/null
+
+  found=$((found + count))
+  echo ""
+}
+
+# --- AT JOBS ---
+collect_at() {
+  header "At Jobs"
+
+  if ! command -v atq &>/dev/null; then
+    echo -e "  ${DIM}atq not found, skipping${RESET}"
+    return
+  fi
+
+  local output
+  output=$(atq 2>/dev/null) || {
+    echo -e "  ${DIM}could not list at jobs${RESET}"
+    return
+  }
+
+  if [ -z "$output" ]; then
+    echo -e "  ${DIM}no at jobs found${RESET}"
+    return
+  fi
+
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    row "AT" "$line" "" ""
+    ((found++)) || true
+  done <<< "$output"
+  echo ""
+}
+
+# --- MAIN ---
+echo -e "${BOLD}Recurring Tasks Monitor${RESET}  ${DIM}$(date)${RESET}"
+
+collect_cron
+collect_paseo
+collect_systemd
+collect_at
+
+echo -e "${BOLD}Total: ${found} recurring task(s) found${RESET}"
+echo ""
