@@ -1,0 +1,14 @@
+{
+  "tasks": [
+    {
+      "name": "update-external-repos",
+      "description": "Pull latest from compound-engineering, compound-knowledge, and opencode repos",
+      "type": "cron",
+      "schedule": "0 6 * * *",
+      "schedule_human": "daily at 6:00 AM",
+      "script": "tooling/sources/update-external-repos.sh",
+      "log": "external/.update-cron.log",
+      "installed_by": "tooling/machine/install-recurring-tasks.sh"
+    }
+  ]
+}

@@ -1,207 +1,163 @@
 #!/usr/bin/env bash
-# recurring-tasks - Monitor all recurring tasks on this machine (read-only)
-# Discovers: cron jobs, Paseo schedules, systemd timers, at jobs
+# recurring-tasks - Monitor heypogi recurring tasks (read-only)
+# Reads tooling/recurring-tasks.json manifest, checks system state
 set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+MANIFEST="$REPO_DIR/tooling/recurring-tasks.json"
 
 BOLD='\033[1m'
 DIM='\033[2m'
+GREEN='\033[32m'
+YELLOW='\033[33m'
+RED='\033[31m'
 CYAN='\033[36m'
 RESET='\033[0m'
 
-found=0
+if [ ! -f "$MANIFEST" ]; then
+  echo -e "${RED}ERROR: manifest not found at $MANIFEST${RESET}" >&2
+  exit 1
+fi
 
-header() {
-  echo ""
-  echo -e "${BOLD}${CYAN}=== $1 ===${RESET}"
-  echo ""
-}
+echo -e "${BOLD}Heypogi Recurring Tasks${RESET}  ${DIM}$(date)${RESET}"
+echo -e "${DIM}manifest: $MANIFEST${RESET}"
+echo ""
 
-row() {
-  local type="$1" name="$2" schedule="$3" target="$4"
-  printf "  ${BOLD}%-10s${RESET} %-30s ${DIM}%-20s${RESET} %s\n" "$type" "$name" "$schedule" "$target"
-}
+# read manifest into shell-friendly format
+task_count=$(python3 -c "
+import json
+with open('$MANIFEST') as f:
+    print(len(json.load(f)['tasks']))
+")
 
-# --- CRON ---
-collect_cron() {
-  header "Cron Jobs"
+total=$task_count
+active=0
+inactive=0
+missing=0
 
-  # user crontab
-  if crontab -l 2>/dev/null | grep -v '^\s*#' | grep -v '^\s*$' | read -r _; then
-    echo -e "  ${DIM}source: user crontab${RESET}"
-    while IFS= read -r line; do
-      [[ "$line" =~ ^[[:space:]]*# ]] && continue
-      [[ -z "${line// /}" ]] && continue
-      schedule=$(echo "$line" | awk '{printf "%s %s %s %s %s", $1, $2, $3, $4, $5}')
-      command=$(echo "$line" | awk '{for(i=6;i<=NF;i++) printf "%s ", $i; print ""}' | sed 's/ *$//')
-      row "CRON" "(user)" "$schedule" "$command"
-      ((found++)) || true
-    done < <(crontab -l 2>/dev/null)
-    echo ""
-  fi
+for i in $(seq 0 $((task_count - 1))); do
+  eval "$(python3 -c "
+import json
+with open('$MANIFEST') as f:
+    t = json.load(f)['tasks'][$i]
+print(f\"TYPE=\\\"{t['type']}\\\"\")
+print(f\"NAME=\\\"{t['name']}\\\"\")
+print(f\"DESC=\\\"{t.get('description', '')}\\\"\")
+print(f\"SCRIPT=\\\"{t.get('script', '')}\\\"\")
+print(f\"LOG=\\\"{t.get('log', '')}\\\"\")
+print(f\"SCHEDULE=\\\"{t.get('schedule', '')}\\\"\")
+print(f\"SCHEDULE_HUMAN=\\\"{t.get('schedule_human', '')}\\\"\")
+print(f\"INSTALLED_BY=\\\"{t.get('installed_by', '')}\\\"\")
+")"
 
-  # /etc/cron.d/
-  if [ -d /etc/cron.d ]; then
-    for f in /etc/cron.d/*; do
-      [ -f "$f" ] || continue
-      while IFS= read -r line; do
-        [[ "$line" =~ ^[[:space:]]*# ]] && continue
-        [[ -z "${line// /}" ]] && continue
-        schedule=$(echo "$line" | awk '{printf "%s %s %s %s %s", $1, $2, $3, $4, $5}')
-        command=$(echo "$line" | awk '{for(i=6;i<=NF;i++) printf "%s ", $i; print ""}' | sed 's/ *$//')
-        row "CRON" "$(basename "$f")" "$schedule" "$command"
-        ((found++)) || true
-      done < "$f"
-    done
-  fi
+  # determine status
+  status="missing"
+  status_color="$RED"
+  detail=""
 
-  # /etc/crontab
-  if [ -f /etc/crontab ]; then
-    while IFS= read -r line; do
-      [[ "$line" =~ ^[[:space:]]*# ]] && continue
-      [[ -z "${line// /}" ]] && continue
-      # skip variable assignments like SHELL=/bin/sh
-      [[ "$line" =~ ^[A-Z_]+= ]] && continue
-      # /etc/crontab has an extra USER field
-      schedule=$(echo "$line" | awk '{printf "%s %s %s %s %s", $1, $2, $3, $4, $5}')
-      user=$(echo "$line" | awk '{print $6}')
-      command=$(echo "$line" | awk '{for(i=7;i<=NF;i++) printf "%s ", $i; print ""}' | sed 's/ *$//')
-      row "CRON" "(system/$user)" "$schedule" "$command"
-      ((found++)) || true
-    done < <(grep -v '^#' /etc/crontab | grep -v '^\s*$')
-  fi
-}
+  case "$TYPE" in
+    cron)
+      full_script="$REPO_DIR/$SCRIPT"
+      basename_script=$(basename "$SCRIPT")
+      # active: an uncommented line contains the script path
+      cron_active=$(crontab -l 2>/dev/null | grep -v '^\s*#' | grep -cF "$full_script" || true)
+      # inactive: line contains # followed by the script basename (commented command)
+      cron_inactive=$(crontab -l 2>/dev/null | grep -c "#.*$basename_script" || true)
 
-# --- PASEO ---
-collect_paseo() {
-  header "Paseo Schedules"
-
-  if ! command -v paseo &>/dev/null; then
-    echo -e "  ${DIM}paseo not found, skipping${RESET}"
-    return
-  fi
-
-  local output
-  output=$(paseo_list_schedules 2>/dev/null) || {
-    echo -e "  ${DIM}no schedules found or daemon not running${RESET}"
-    return
-  }
-
-  # parse JSON array of schedule objects
-  local count
-  count=$(echo "$output" | python3 -c "
+      if [ "$cron_active" -gt 0 ]; then
+        status="active"
+        status_color="$GREEN"
+        cron_line=$(crontab -l 2>/dev/null | grep -v '^\s*#' | grep -F "$full_script" | head -1)
+        detail=$(echo "$cron_line" | awk '{for(i=1;i<=5;i++) printf "%s ", $i; print ""}' | sed 's/ *$//')
+      elif [ "$cron_inactive" -gt 0 ]; then
+        status="inactive"
+        status_color="$YELLOW"
+        detail="(commented out)"
+      fi
+      ;;
+    paseo)
+      if command -v paseo &>/dev/null; then
+        paseo_output=$(paseo_list_schedules 2>/dev/null) || true
+        paseo_status=$(echo "$paseo_output" | python3 -c "
 import sys, json
-data = json.load(sys.stdin)
-print(len(data))
-" 2>/dev/null) || { echo -e "  ${DIM}could not parse paseo output${RESET}"; return; }
+try:
+    data = json.load(sys.stdin)
+    for s in data:
+        if s.get('name') == '$NAME' or '$SCRIPT' in s.get('prompt', ''):
+            print(s.get('status', ''))
+            break
+    else:
+        print('')
+except:
+    print('')
+" 2>/dev/null)
 
-  if [ "$count" -eq 0 ]; then
-    echo -e "  ${DIM}no schedules configured${RESET}"
-    return
-  fi
-
-  echo "$output" | python3 -c "
+        if [ "$paseo_status" = "active" ]; then
+          status="active"
+          status_color="$GREEN"
+          schedule=$(echo "$paseo_output" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 for s in data:
-    sid = s.get('id', '?')
-    name = s.get('name', sid)
-    cron = s.get('cadence', {}).get('expression', '?')
-    tz = s.get('cadence', {}).get('timezone', '')
-    status = s.get('status', '?')
-    prompt = s.get('prompt', '')[:60]
-    if len(s.get('prompt', '')) > 60:
-        prompt += '...'
-    label = f'{name} ({sid[:8]})'
-    schedule = f'{cron} {tz}'.strip()
-    print(f'  PASEO     {label:<30} {schedule:<20} [{status}] {prompt}')
-" 2>/dev/null
+    if s.get('name') == '$NAME' or '$SCRIPT' in s.get('prompt', ''):
+        print(s.get('cadence', {}).get('expression', '?'))
+        break
+" 2>/dev/null)
+          detail="$schedule"
+        elif [ -n "$paseo_status" ]; then
+          # exists but paused
+          status="inactive"
+          status_color="$YELLOW"
+          detail="(status: $paseo_status)"
+        fi
+      fi
+      ;;
+  esac
 
-  found=$((found + count))
+  # log file info
+  log_info=""
+  if [ -n "$LOG" ]; then
+    log_full="$REPO_DIR/$LOG"
+    if [ -f "$log_full" ]; then
+      log_size=$(du -h "$log_full" 2>/dev/null | cut -f1)
+      log_modified=$(stat -c '%Y' "$log_full" 2>/dev/null || echo "0")
+      log_age=$(( ($(date +%s) - log_modified) / 86400 ))
+      if [ "$log_age" -eq 0 ]; then
+        log_age_str="today"
+      elif [ "$log_age" -eq 1 ]; then
+        log_age_str="yesterday"
+      else
+        log_age_str="${log_age}d ago"
+      fi
+      log_info="${DIM}log: $LOG ($log_size, $log_age_str)${RESET}"
+    else
+      log_info="${DIM}log: $LOG (not yet created)${RESET}"
+    fi
+  fi
+
+  # print status line
+  case "$status" in
+    active)
+      echo -e "  ${GREEN}ACTIVE${RESET}   ${BOLD}$NAME${RESET}"
+      ((active++)) || true
+      ;;
+    inactive)
+      echo -e "  ${YELLOW}INACTIVE${RESET} ${BOLD}$NAME${RESET}"
+      ((inactive++)) || true
+      ;;
+    missing)
+      echo -e "  ${RED}MISSING${RESET}  ${BOLD}$NAME${RESET}"
+      ((missing++)) || true
+      ;;
+  esac
+
+  echo -e "           ${DIM}$DESC${RESET}"
+  echo -e "           type: $TYPE  schedule: ${SCHEDULE_HUMAN:-$SCHEDULE}  target: $SCRIPT"
+  [ -n "$detail" ] && echo -e "           system: $detail"
+  [ -n "$log_info" ] && echo -e "           $log_info"
+  [ -n "$INSTALLED_BY" ] && echo -e "           installed by: ${DIM}$INSTALLED_BY${RESET}"
   echo ""
-}
+done
 
-# --- SYSTEMD TIMERS ---
-collect_systemd() {
-  header "Systemd Timers"
-
-  if ! command -v systemctl &>/dev/null; then
-    echo -e "  ${DIM}systemctl not found, skipping${RESET}"
-    return
-  fi
-
-  local output
-  output=$(systemctl list-timers --all --no-pager --no-legend 2>/dev/null) || {
-    echo -e "  ${DIM}could not list timers${RESET}"
-    return
-  }
-
-  if [ -z "$output" ]; then
-    echo -e "  ${DIM}no timers found${RESET}"
-    return
-  fi
-
-  local count
-  count=$(echo "$output" | grep -c '\.timer' 2>/dev/null) || count=0
-
-  echo "$output" | python3 -c "
-import sys, re
-for line in sys.stdin:
-    line = line.strip()
-    if not line or 'UNIT' in line and 'ACTIVATES' in line:
-        continue
-    parts = line.split()
-    if len(parts) < 6:
-        continue
-    timer = parts[-2]
-    activates = parts[-1]
-    for i, p in enumerate(parts[1:], 1):
-        if re.match(r'^(\d+(min|h|s|day|mon)|-)$', p) or (p.endswith('min') or p.endswith('s') or p.endswith('h') or p.endswith('day') or p == '-'):
-            left = p
-            break
-    else:
-        left = '?'
-    print(f'  SYSTEMD   {timer:<30} {left:<20} {activates}')
-" 2>/dev/null
-
-  found=$((found + count))
-  echo ""
-}
-
-# --- AT JOBS ---
-collect_at() {
-  header "At Jobs"
-
-  if ! command -v atq &>/dev/null; then
-    echo -e "  ${DIM}atq not found, skipping${RESET}"
-    return
-  fi
-
-  local output
-  output=$(atq 2>/dev/null) || {
-    echo -e "  ${DIM}could not list at jobs${RESET}"
-    return
-  }
-
-  if [ -z "$output" ]; then
-    echo -e "  ${DIM}no at jobs found${RESET}"
-    return
-  fi
-
-  while IFS= read -r line; do
-    [[ -z "$line" ]] && continue
-    row "AT" "$line" "" ""
-    ((found++)) || true
-  done <<< "$output"
-  echo ""
-}
-
-# --- MAIN ---
-echo -e "${BOLD}Recurring Tasks Monitor${RESET}  ${DIM}$(date)${RESET}"
-
-collect_cron
-collect_paseo
-collect_systemd
-collect_at
-
-echo -e "${BOLD}Total: ${found} recurring task(s) found${RESET}"
+echo -e "${BOLD}Summary: $total task(s)  ${GREEN}${active} active${RESET}  ${YELLOW}${inactive} inactive${RESET}  ${RED}${missing} missing${RESET}"
 echo ""
