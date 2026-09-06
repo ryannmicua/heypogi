@@ -12,13 +12,13 @@ execution: code
 
 **Objective:** Centralize heypogi environment variable management into `~/.config/heypogi/` with heypogi-owned common vars, user-managed overrides and secrets, and a systemd service template for Paseo.
 
-**Means:** Three env files (`env-common`, `env-override`, `env-secrets`), a setup script with idempotent `.bashrc` modification, a check script for validation, and a systemd service template with `EnvironmentFile=` lines. (KTD1, KTD2, KTD3, KTD4, KTD5)
+**Means:** Three env files (`env-common`, `env-override`, `env-secrets`), a setup script with idempotent `.bashrc` modification, a check script for validation, and a systemd service template used by `dev-stack.sh`. (KTD1, KTD2, KTD3, KTD4, KTD5)
 
 **Authority hierarchy:** This plan owns file layout, script behavior, and template contents. `dev-stack.sh` owns systemd lifecycle. Paseo daemon behavior is external.
 
-**Stop conditions:** All env files created, `.bashrc` updated idempotently, check script produces correct table and JSON, systemd template installs via `dev-stack.sh startup install`.
+**Stop conditions:** All env files created, `.bashrc` updated idempotently, check script produces correct table and JSON, `dev-stack.sh startup install` renders the template or appends `EnvironmentFile=` lines.
 
-**Tail ownership:** `dev-stack.sh` owns systemd install/enable/disable. `setup-env.sh` owns env file generation and `.bashrc` updates.
+**Tail ownership:** `dev-stack.sh` owns systemd install/enable/disable and template rendering. `setup-env.sh` owns env file generation and `.bashrc` updates.
 
 ---
 
@@ -26,7 +26,7 @@ execution: code
 
 ### Summary
 
-Environment variables for heypogi are currently scattered across shell profiles, hardcoded systemd service files, and ad-hoc exports. This plan centralizes them into `~/.config/heypogi/` with three files: `.env-common` (heypogi-managed), `.env-override` (user customizations), and `.env-secrets` (user credentials). A setup script generates the files and updates `.bashrc` idempotently. A check script validates required vars are set. A systemd service template replaces the hardcoded `PASEO_PASSWORD` with `EnvironmentFile=` references.
+Environment variables for heypogi are currently scattered across shell profiles, hardcoded systemd service files, and ad-hoc exports. This plan centralizes them into `~/.config/heypogi/` with three files: `.env-common` (heypogi-managed), `.env-override` (user customizations), and `.env-secrets` (user credentials). A setup script generates the files and updates `.bashrc` idempotently. A check script validates required vars are set. `dev-stack.sh` manages `EnvironmentFile=` references in the Paseo systemd service.
 
 ### Problem Frame
 
@@ -48,37 +48,42 @@ When setting up a machine with heypogi, environment variables need to be availab
 - R7. `setup-env.sh` generates `.env-common` from template, replacing `__REPO_ROOT__` with the actual repo root.
 - R8. `setup-env.sh` creates `.env-secrets` and `.env-override` only if missing.
 - R9. `setup-env.sh` updates `~/.bashrc` with a marker-bounded source block that is idempotent.
-- R10. `setup-env.sh` sets `chmod 600` on `.env-secrets`.
+- R10. `setup-env.sh` sets `chmod 600` on `.env-secrets`, `chmod 644` on `.env-common`, `chmod 640` on `.env-override`.
 
 **Check Script**
 
 - R11. `check-env.sh` reads all three files, resolves precedence, and validates against a registry of required vars.
 - R12. Default output is a pretty table: `VARIABLE | STATUS | SOURCE | NOTES`.
-- R13. `--json` flag outputs a JSON array.
+- R13. `--json` flag outputs a JSON array (deferred until a consumer exists).
 - R14. Exit codes: 0 = all ok, 1 = missing vars, 2 = parse error.
+- R15. Secret vars (those in `.env-secrets`) show only status (`set`/`missing`) in output, never the value.
 
 **Systemd Integration**
 
-- R15. The Paseo systemd service template uses `EnvironmentFile=` lines instead of hardcoded `Environment=PASEO_PASSWORD=...`.
-- R16. The template lives at `tooling/dev-stack/paseo.service` and is installed by `dev-stack.sh startup install`.
+- R16. `dev-stack.sh` manages `EnvironmentFile=` lines in the Paseo systemd service.
+- R17. On new installs (no existing service file), `dev-stack.sh` renders the template with actual `$HOME`/`$USER` values and writes it.
+- R18. On existing installs (service file exists), `dev-stack.sh` appends `EnvironmentFile=` lines if missing, preserving existing customizations.
+- R19. The `EnvironmentFile=` paths use actual `$HOME` computed at install time, not placeholders.
 
 **Shell Integration**
 
-- R17. The `.bashrc` source block uses `set -a` / `set +a` to export all sourced vars to child processes.
-- R18. The source block is wrapped in marker comments for idempotent update.
+- R20. The `.bashrc` source block uses `set -a` / `set +a` to export all sourced vars to child processes.
+- R21. The source block is wrapped in marker comments for idempotent update.
 
 ### Scope Boundaries
 
 **In scope:**
 - Env file template, setup script, check script
-- Systemd service template for Paseo
+- `dev-stack.sh` integration for systemd `EnvironmentFile=` management
 - `.bashrc` integration
+- Env var registry in `DEPENDENCIES.md`
 
 **Out of scope:**
 - Windows/PowerShell env management (separate concern)
 - Paseo daemon runtime behavior
 - OpenChamber or OpenCode env var management
 - Automatic secret rotation
+- Shell support beyond bash (zsh, .profile)
 
 ---
 
@@ -92,16 +97,20 @@ When setting up a machine with heypogi, environment variables need to be availab
 
 - KTD3. **`set -a` / `set +a` sourcing** over explicit `export` in env files. Plain `KEY=value` format is compatible with both shell sourcing (via `set -a`) and systemd `EnvironmentFile=` (which requires no `export` keyword). One file format works everywhere. (session-settled: user-directed - chosen over `export` in files: systemd compatibility)
 
-- KTD4. **`EnvironmentFile=` in systemd template** over hardcoded `Environment=` lines. Secrets are no longer visible in `systemctl cat` output or the unit file itself. The `-` prefix ensures the service starts even if env files are missing. (session-settled: user-directed - chosen over inline `Environment=`: security and separation)
+- KTD4. **`EnvironmentFile=` managed by `dev-stack.sh`** over hardcoded `Environment=` lines. Secrets are no longer visible in `systemctl cat` output or the unit file itself. New installs get a complete service file from the template; existing installs get appended lines preserving customizations. (session-settled: user-directed - chosen over inline `Environment=`: security and separation)
 
-- KTD5. **Template at `tooling/dev-stack/paseo.service`** with `dev-stack.sh` path update. Co-locates with other dev-stack files; requires updating one path reference in `dev-stack.sh:641`. (session-settled: user-directed - chosen over `scripts/systemd/`: follows existing dev-stack file organization)
+- KTD5. **Template at `tooling/dev-stack/paseo.service`** used by `dev-stack.sh`. New installs render it with actual user/home values. Existing installs append `EnvironmentFile=` lines. No standalone template installation. (session-settled: user-directed - chosen over scripts/systemd/: follows existing dev-stack file organization)
+
+- KTD6. **Strict env grammar** for shell/systemd compatibility. No `$PATH` expansion, no shell substitutions in env files. Concrete values only. Prevents silent incompatibility between shell and systemd parsers. (session-settled: user-directed - chosen over flexible shell syntax: cross-consumer reliability)
 
 ### Assumptions
 
-- The repo root is determinable at setup time via `git rev-parse --show-toplevel` or the script's own location.
+- The repo root is determinable at setup time via the script's own location.
 - `~/.config/heypogi/` follows XDG conventions and is appropriate for user-specific config.
 - Systemd reads `EnvironmentFile=` as root, so `.env-secrets` needs to be readable by root (acceptable on single-user machines where the service runs as the user).
-- The current Paseo service file at `/etc/systemd/system/paseo.service` was created manually and will be replaced by the template on next `dev-stack.sh startup install`.
+- Systemd sets `HOME` automatically from `User=` directive; no need to set it explicitly.
+- `PASEO_HOME` is not needed - Paseo derives it from `HOME`.
+- Bash-only integration. Non-bash shell support is out of scope.
 
 ---
 
@@ -113,10 +122,10 @@ When setting up a machine with heypogi, environment variables need to be availab
 - **Requirements:** R1, R3, R5
 - **Files:** `tooling/env/env-common.template`, `tooling/env/env-secrets.template`
 - **Approach:**
-  - `env-common.template`: plain `KEY=value` format with `__REPO_ROOT__` placeholder. Vars: `HEYPOGI_ROOT`, `OPENCODE_CONFIG_DIR`, `PASEO_HOME`, `PATH`.
+  - `env-common.template`: plain `KEY=value` format with `__REPO_ROOT__` placeholder. Vars: `HEYPOGI_ROOT`, `OPENCODE_CONFIG_DIR`, `PATH`. No `$PATH` expansion - concrete values only.
   - `env-secrets.template`: commented-out placeholders for `PASEO_PASSWORD`, `GH_PAT_COPILOT`, `OPENCODE_SERVER_PASSWORD`.
 - **Test scenarios:**
-  - Templates are valid shell syntax (no `export` keyword).
+  - Templates are valid env syntax (no `export` keyword, no shell expansion).
   - `env-common.template` contains `__REPO_ROOT__` placeholder.
   - `env-secrets.template` has all values commented out.
 
@@ -127,11 +136,10 @@ When setting up a machine with heypogi, environment variables need to be availab
 - **Files:** `tooling/env/setup-env.sh`
 - **Approach:**
   - Create `~/.config/heypogi/` if missing.
-  - Copy `env-common.template` to `.env-common`, replacing `__REPO_ROOT__` with actual repo root (detected from script location).
+  - Render `env-common.template` to `.env-common`, replacing `__REPO_ROOT__` with actual repo root (detected from script location). Write to temp file first, validate, then atomic rename.
   - Create `.env-secrets` from template if missing (skip if exists).
   - Create empty `.env-override` if missing (skip if exists).
-  - Set `chmod 600` on `.env-secrets`.
-  - Set `chmod 644` on `.env-common` and `chmod 640` on `.env-override`.
+  - Set `chmod 600` on `.env-secrets`, `chmod 644` on `.env-common`, `chmod 640` on `.env-override`.
   - Idempotent `.bashrc` update: detect marker block, replace if content differs, append if missing.
   - Output what was created/skipped.
 - **Test scenarios:**
@@ -145,48 +153,70 @@ When setting up a machine with heypogi, environment variables need to be availab
 ### U3. Check script
 
 - **Goal:** Validate required env vars and report status.
-- **Requirements:** R11, R12, R13, R14
+- **Requirements:** R11, R12, R14, R15
 - **Files:** `tooling/env/check-env.sh`
 - **Approach:**
-  - Define registry of required vars with descriptions.
+  - Define registry of required vars (see Registry below).
   - Read all three files, resolve precedence (override > secrets > common).
   - Check each required var against resolved values.
-  - Pretty table output by default; `--json` flag for JSON array.
-  - Secret vars (those in `.env-secrets`) show only status (`set`/`missing`), never the value.
+  - Pretty table output by default; `--json` flag deferred until consumer exists.
+  - Secret vars show only status (`set`/`missing`), never the value.
   - Exit codes: 0 (ok), 1 (missing), 2 (parse error).
 - **Test scenarios:**
   - All vars set: exit 0, table shows all "ok".
   - Missing var: exit 1, table shows "missing".
   - Override takes precedence over common.
-  - `--json` produces valid JSON array.
+  - Secret values never appear in output.
   - Missing env files: graceful handling (treats as empty).
 
 ### U4. Systemd service template
 
-- **Goal:** Create a Paseo systemd service template with `EnvironmentFile=` lines.
-- **Requirements:** R15, R16
+- **Goal:** Provide a template for `dev-stack.sh` to use when installing the Paseo service.
+- **Requirements:** R16, R17, R18, R19
 - **Files:** `tooling/dev-stack/paseo.service`
 - **Approach:**
-  - Based on current live service file with `Environment=PASEO_PASSWORD=...` removed.
-  - Add three `EnvironmentFile=-` lines pointing to `~/.config/heypogi/` files.
-  - Use `__USER__` and `__HOME__` placeholders for portability.
+  - Template with `__USER__` placeholder for portability.
+  - `EnvironmentFile=-` lines use `__HOME__/.config/heypogi/` paths.
+  - No hardcoded `PASEO_PASSWORD` or other secrets.
   - `ExecStart` keeps the current command with `--web-ui --foreground`.
+  - `dev-stack.sh` renders this template with actual values on new installs.
+  - On existing installs, `dev-stack.sh` appends `EnvironmentFile=` lines instead.
 - **Test scenarios:**
   - Template is valid systemd syntax.
   - Contains three `EnvironmentFile=-` lines.
-  - No hardcoded `PASEO_PASSWORD` value.
+  - No hardcoded secret values.
   - `WantedBy=multi-user.target` present.
 
-### U5. Update dev-stack.sh path reference
+### U5. dev-stack.sh integration
 
-- **Goal:** Point `dev-stack.sh` to the new template location.
-- **Requirements:** R16
-- **Files:** `tooling/dev-stack/dev-stack.sh` (line 641)
+- **Goal:** Update `dev-stack.sh` to manage `EnvironmentFile=` lines in the Paseo service.
+- **Requirements:** R16, R17, R18, R19
+- **Files:** `tooling/dev-stack/dev-stack.sh` (do_startup function)
 - **Approach:**
-  - Change `$SCRIPT_DIR/../../scripts/systemd/paseo.service` to `$SCRIPT_DIR/paseo.service`. Note: the current reference points to a non-existent path (`scripts/systemd/` does not exist in the repo) - this is fixing a pre-existing broken reference.
+  - `startup install`: If no service file exists, render template with actual `$USER`/`$HOME` values and write to `/etc/systemd/system/`. If service file exists, check for `EnvironmentFile=` lines and append if missing.
+  - `fix`: Ensure `EnvironmentFile=` lines exist in the live service file.
+  - Both paths are idempotent.
 - **Test scenarios:**
-  - `dev-stack.sh startup install -a paseo` finds the template.
-  - `dev-stack.sh startup install -a paseo` copies to `/etc/systemd/system/`.
+  - Fresh install: service file created with rendered template.
+  - Existing service: `EnvironmentFile=` lines appended, customizations preserved.
+  - Re-run: no duplicate lines.
+  - Fix: adds lines to service file missing them.
+
+---
+
+## Env Var Registry
+
+Defined in `DEPENDENCIES.md` and consumed by `check-env.sh`:
+
+| Variable | Set by | Required | Condition |
+|---|---|---|---|
+| `HEYPOGI_ROOT` | setup-env.sh | always | - |
+| `OPENCODE_CONFIG_DIR` | setup-env.sh | always | - |
+| `PATH` | setup-env.sh | always | - |
+| `PASEO_PASSWORD` | .env-secrets | when Paseo uses auth | - |
+| `GH_PAT_COPILOT` | .env-secrets | when Copilot reviews used | - |
+| `OPENCODE_SERVER_PASSWORD` | .env-secrets | when OpenChamber binds non-loopback | - |
+| `OPENCHAMBER_UI_PASSWORD` | .env-secrets | when OpenChamber binds non-loopback | - |
 
 ---
 
@@ -197,16 +227,17 @@ When setting up a machine with heypogi, environment variables need to be availab
 | Templates valid | `bash -n tooling/env/env-common.template && bash -n tooling/env/env-secrets.template` | Exit 0 |
 | Setup idempotent | `bash tooling/env/setup-env.sh && bash tooling/env/setup-env.sh` | No errors, no duplicate `.bashrc` block |
 | Check script works | `bash tooling/env/check-env.sh` | Table output with ok/missing |
-| Check JSON works | `bash tooling/env/check-env.sh --json` | Valid JSON |
+| Check secrets hidden | `bash tooling/env/check-env.sh` | No secret values in output |
 | Systemd template valid | `systemd-analyze verify tooling/dev-stack/paseo.service 2>&1` or manual review | No syntax errors |
-| dev-stack finds template | `ls tooling/dev-stack/paseo.service` | File exists |
+| dev-stack integration | Fresh: `dev-stack.sh startup install -a paseo` creates service. Existing: appends lines. | Service file has `EnvironmentFile=` lines |
 
 ---
 
 ## Definition of Done
 
-- All five files created and in their correct locations.
+- All files created and in their correct locations.
 - `setup-env.sh` runs idempotently (run twice, check `.bashrc` has exactly one marker block).
-- `check-env.sh` produces correct table and JSON output.
-- `dev-stack.sh startup install -a paseo` successfully copies the template.
+- `check-env.sh` produces correct table with no secret values exposed.
+- `dev-stack.sh startup install -a paseo` renders template or appends lines as appropriate.
 - Current live service file at `/etc/systemd/system/paseo.service` no longer has hardcoded `PASEO_PASSWORD`.
+- Env var registry documented in `DEPENDENCIES.md`.
