@@ -636,15 +636,64 @@ do_startup() {
                 echo_info "OpenChamber: no built-in autostart (use systemd or cron)"
                 ;;
             paseo)
+                local SERVICE_FILE="/etc/systemd/system/paseo.service"
+                local TEMPLATE="$SCRIPT_DIR/paseo.service"
+
+                ensure_env_file_lines() {
+                    local target="$1"
+                    local env_lines=(
+                        "EnvironmentFile=-$HOME/.config/heypogi/.env-common"
+                        "EnvironmentFile=-$HOME/.config/heypogi/.env-override"
+                        "EnvironmentFile=-$HOME/.config/heypogi/.env-secrets"
+                    )
+                    local added=0
+                    for line in "${env_lines[@]}"; do
+                        if ! grep -qF "$line" "$target" 2>/dev/null; then
+                            sed -i "/^ExecStart=/i $line" "$target"
+                            added=$((added+1))
+                        fi
+                    done
+                    return $added
+                }
+
                 case "$verb" in
                     install)
-                        if [[ -f "$SCRIPT_DIR/../../scripts/systemd/paseo.service" ]]; then
-                            sudo cp "$SCRIPT_DIR/../../scripts/systemd/paseo.service" /etc/systemd/system/
+                        if [[ -f "$SERVICE_FILE" ]]; then
+                            # Existing service: append EnvironmentFile= lines if missing
+                            local env_count
+                            env_count=$(grep -c "EnvironmentFile=-.*\.config/heypogi" "$SERVICE_FILE" 2>/dev/null || echo 0)
+                            if [[ "$env_count" -lt 3 ]]; then
+                                ensure_env_file_lines "$SERVICE_FILE"
+                                sudo systemctl daemon-reload
+                                echo_success "Paseo systemd service updated with env file references"
+                            else
+                                echo_success "Paseo systemd service already has env file references"
+                            fi
+                        elif [[ -f "$TEMPLATE" ]]; then
+                            # New install: render template and write
+                            local rendered
+                            rendered=$(sed -e "s|__USER__|$(whoami)|g" -e "s|__HOME__|$HOME|g" "$TEMPLATE")
+                            echo "$rendered" | sudo tee "$SERVICE_FILE" > /dev/null
                             sudo systemctl daemon-reload
                             sudo systemctl enable paseo.service
                             echo_success "Paseo systemd service installed"
                         else
-                            echo_warn "paseo.service template not found"
+                            echo_warn "paseo.service template not found at $TEMPLATE"
+                        fi
+                        ;;
+                    fix)
+                        if [[ -f "$SERVICE_FILE" ]]; then
+                            local env_count
+                            env_count=$(grep -c "EnvironmentFile=-.*\.config/heypogi" "$SERVICE_FILE" 2>/dev/null || echo 0)
+                            if [[ "$env_count" -lt 3 ]]; then
+                                ensure_env_file_lines "$SERVICE_FILE"
+                                sudo systemctl daemon-reload
+                                echo_success "Paseo systemd service fixed with env file references"
+                            else
+                                echo_success "Paseo systemd service already has env file references"
+                            fi
+                        else
+                            echo_warn "paseo.service not found at $SERVICE_FILE"
                         fi
                         ;;
                     enable)
