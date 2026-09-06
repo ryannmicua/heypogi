@@ -1,0 +1,17 @@
+[Unit]
+Description=Paseo AI Agent Daemon
+After=network.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=%h
+EnvironmentFile=-__HOME__/.config/heypogi/.env-common
+EnvironmentFile=-__HOME__/.config/heypogi/.env-override
+EnvironmentFile=-__HOME__/.config/heypogi/.env-secrets
+ExecStart=/usr/local/bin/paseo daemon start --web-ui --foreground
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

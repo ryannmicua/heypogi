@@ -47,7 +47,19 @@ Cloned into `external/` for reference by OpenCode subagents:
 
 ## Environment variables
 
-Set by `tooling/machine/setup-environment.ps1`:
+Set by `tooling/env/setup-env.sh` into `~/.config/heypogi/`:
+
+| Variable | Set by | Required | Condition |
+|---|---|---|---|
+| `HEYPOGI_ROOT` | setup-env.sh | always | - |
+| `OPENCODE_CONFIG_DIR` | setup-env.sh | always | - |
+| `PATH` | setup-env.sh | always | - |
+| `PASEO_PASSWORD` | .env-secrets | when Paseo uses auth | - |
+| `GH_PAT_COPILOT` | .env-secrets | when Copilot reviews used | - |
+| `OPENCODE_SERVER_PASSWORD` | .env-secrets | when OpenCode server binds non-loopback | - |
+| `OPENCHAMBER_UI_PASSWORD` | .env-secrets | when OpenChamber binds non-loopback | - |
+
+Windows legacy (set by `tooling/machine/setup-environment.ps1`):
 
 | Variable | Value | Purpose |
 |---|---|---|
