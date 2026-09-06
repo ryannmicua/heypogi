@@ -8,7 +8,7 @@
   },
   "role_models": {
     "impl": "opencode/opencode-go/mimo-v2.5",
-    "ui": "codex/gpt-5.6-sol",
+    "ui": "codex/gpt-5.6-terra",
     "research": "opencode/opencode-go/mimo-v2.5",
     "planning": "codex/gpt-5.6-sol",
     "audit": "opencode/opencode-go/minimax-m3",
@@ -21,7 +21,7 @@
     "AGENT CREATION: Use role_models mapping for provider strings. The format is provider/model where model can contain slashes (e.g. opencode/opencode-go/mimo-v2.5). Do NOT use bare opencode-go/ prefix as provider.",
     "PROVIDER ROUTING: For OpenAI models, route via the codex provider as codex/<model> (e.g. codex/gpt-5.6-sol). MiMo workhorses stay on opencode-go.",
     "impl: model=opencode-go/mimo-v2.5, thinkingOptionId=max, features.auto_accept=true, features.fast_mode=true, modeId=build",
-    "ui: provider=codex, model=gpt-5.6-sol, thinkingOptionId=high (limited budget - reserve for copywriting, naming, UX copy, visual design, styling only)",
+    "ui: provider=codex, model=gpt-5.6-terra, thinkingOptionId=high (limited budget - reserve for copywriting, naming, UX copy, visual design, styling only)",
     "research: model=opencode-go/mimo-v2.5, thinkingOptionId=max",
     "planning: model=codex/gpt-5.6-sol, thinkingOptionId=high (limited budget - reserve for high-value planning only).",
     "audit: model=opencode-go/minimax-m3, thinkingOptionId=max (lead reviewer - cross-family contrast from impl). For a second opinion, escalate to codex/gpt-5.6-sol, thinkingOptionId=high.",
