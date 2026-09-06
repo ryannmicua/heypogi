@@ -98,6 +98,7 @@ elif grep -qF "$MARKER_START" "$BASHRC" && grep -qF "$MARKER_END" "$BASHRC"; the
         echo "  .bashrc: source block unchanged, skipping"
     else
         # Replace existing block (safe: both markers confirmed present)
+        SAVED_PERMS=$(stat -c %a "$BASHRC")
         TEMP_BASHRC=$(mktemp)
         awk -v start="$MARKER_START" -v end="$MARKER_END" -v block="$SOURCE_BLOCK" '
             $0 == start { print block; skip=1; next }
@@ -105,11 +106,14 @@ elif grep -qF "$MARKER_START" "$BASHRC" && grep -qF "$MARKER_END" "$BASHRC"; the
             !skip { print }
         ' "$BASHRC" > "$TEMP_BASHRC"
         mv "$TEMP_BASHRC" "$BASHRC"
+        chmod "$SAVED_PERMS" "$BASHRC"
         echo "  .bashrc: source block updated"
     fi
 else
+    SAVED_PERMS=$(stat -c %a "$BASHRC")
     echo "" >> "$BASHRC"
     echo "$SOURCE_BLOCK" >> "$BASHRC"
+    chmod "$SAVED_PERMS" "$BASHRC"
     echo "  .bashrc: source block appended"
 fi
 
