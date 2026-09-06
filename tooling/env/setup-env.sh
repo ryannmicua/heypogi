@@ -81,21 +81,23 @@ echo "Updating .bashrc..."
 
 BASHRC="$HOME/.bashrc"
 SOURCE_BLOCK="$MARKER_START
+set -a
 . \"\$HOME/.config/heypogi/.env-common\"
 . \"\$HOME/.config/heypogi/.env-override\"
 . \"\$HOME/.config/heypogi/.env-secrets\"
+set +a
 $MARKER_END"
 
 if [[ ! -f "$BASHRC" ]]; then
     echo "$SOURCE_BLOCK" > "$BASHRC"
     echo "  .bashrc: created with source block"
-elif grep -qF "$MARKER_START" "$BASHRC"; then
-    # Check if content differs
+elif grep -qF "$MARKER_START" "$BASHRC" && grep -qF "$MARKER_END" "$BASHRC"; then
+    # Both markers present - check if content differs
     EXISTING=$(sed -n "/$MARKER_START/,/$MARKER_END/p" "$BASHRC")
     if [[ "$EXISTING" == "$SOURCE_BLOCK" ]]; then
         echo "  .bashrc: source block unchanged, skipping"
     else
-        # Replace existing block
+        # Replace existing block (safe: both markers confirmed present)
         TEMP_BASHRC=$(mktemp)
         awk -v start="$MARKER_START" -v end="$MARKER_END" -v block="$SOURCE_BLOCK" '
             $0 == start { print block; skip=1; next }
@@ -103,7 +105,6 @@ elif grep -qF "$MARKER_START" "$BASHRC"; then
             !skip { print }
         ' "$BASHRC" > "$TEMP_BASHRC"
         mv "$TEMP_BASHRC" "$BASHRC"
-        chmod 644 "$BASHRC"
         echo "  .bashrc: source block updated"
     fi
 else

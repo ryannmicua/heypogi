@@ -1,0 +1,19 @@
+{
+  "pr": "https://github.com/ryannmicua/heypogi/pull/4",
+  "rounds": [
+    {
+      "round": 1,
+      "head_sha": "6160ab164109764ab5ee9af783a04619c6d07978",
+      "review_sha": null,
+      "findings": [],
+      "fixes_ordered": [],
+      "fixes_verified": [],
+      "copilot_round_requested": true,
+      "copilot_round_landed": false,
+      "verdict": "ready",
+      "notes": "Copilot review request did not land (may not be enabled for this repo). All verification checks pass. Code review by orchestrator found no critical issues."
+    }
+  ],
+  "state": "ready",
+  "final_verdict": "ready"
+}

@@ -56,7 +56,7 @@ Set by `tooling/env/setup-env.sh` into `~/.config/heypogi/`:
 | `PATH` | setup-env.sh | always | - |
 | `PASEO_PASSWORD` | .env-secrets | when Paseo uses auth | - |
 | `GH_PAT_COPILOT` | .env-secrets | when Copilot reviews used | - |
-| `OPENCODE_SERVER_PASSWORD` | .env-secrets | when OpenChamber binds non-loopback | - |
+| `OPENCODE_SERVER_PASSWORD` | .env-secrets | when OpenCode server binds non-loopback | - |
 | `OPENCHAMBER_UI_PASSWORD` | .env-secrets | when OpenChamber binds non-loopback | - |
 
 Windows legacy (set by `tooling/machine/setup-environment.ps1`):

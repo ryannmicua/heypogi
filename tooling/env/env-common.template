@@ -4,4 +4,4 @@
 
 HEYPOGI_ROOT=__REPO_ROOT__
 OPENCODE_CONFIG_DIR=__REPO_ROOT__/dotfiles/opencode
-PATH=__REPO_ROOT__/tooling/bin:${PATH}
+PATH=__REPO_ROOT__/tooling/bin:/usr/local/bin:/usr/bin:/bin

@@ -28,7 +28,7 @@ REGISTRY=(
     "PATH|always||false"
     "PASEO_PASSWORD|when Paseo uses auth||true"
     "GH_PAT_COPILOT|when Copilot reviews used||true"
-    "OPENCODE_SERVER_PASSWORD|when OpenChamber binds non-loopback||true"
+    "OPENCODE_SERVER_PASSWORD|when OpenCode server binds non-loopback||true"
     "OPENCHAMBER_UI_PASSWORD|when OpenChamber binds non-loopback||true"
 )
 
@@ -112,7 +112,7 @@ else
     if [[ $missing -eq 0 ]]; then
         echo "All required env vars are set."
     else
-        echo "$missing required env var(s) missing."
+        echo "$missing env var(s) missing."
     fi
 fi
 

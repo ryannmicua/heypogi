@@ -649,7 +649,7 @@ do_startup() {
                     local added=0
                     for line in "${env_lines[@]}"; do
                         if ! grep -qF "$line" "$target" 2>/dev/null; then
-                            sed -i "/^ExecStart=/i $line" "$target"
+                            sudo sed -i "/^ExecStart=/i $line" "$target"
                             added=$((added+1))
                         fi
                     done
@@ -661,7 +661,7 @@ do_startup() {
                         if [[ -f "$SERVICE_FILE" ]]; then
                             # Existing service: append EnvironmentFile= lines if missing
                             local env_count
-                            env_count=$(grep -c "EnvironmentFile=-.*\.config/heypogi" "$SERVICE_FILE" 2>/dev/null || echo 0)
+                            env_count=$(grep -c "EnvironmentFile=-.*\.config/heypogi" "$SERVICE_FILE" 2>/dev/null || true)
                             if [[ "$env_count" -lt 3 ]]; then
                                 ensure_env_file_lines "$SERVICE_FILE"
                                 sudo systemctl daemon-reload
@@ -684,7 +684,7 @@ do_startup() {
                     fix)
                         if [[ -f "$SERVICE_FILE" ]]; then
                             local env_count
-                            env_count=$(grep -c "EnvironmentFile=-.*\.config/heypogi" "$SERVICE_FILE" 2>/dev/null || echo 0)
+                            env_count=$(grep -c "EnvironmentFile=-.*\.config/heypogi" "$SERVICE_FILE" 2>/dev/null || true)
                             if [[ "$env_count" -lt 3 ]]; then
                                 ensure_env_file_lines "$SERVICE_FILE"
                                 sudo systemctl daemon-reload
