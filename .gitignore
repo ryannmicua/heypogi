@@ -39,5 +39,8 @@ external/.repo-update-status.json
 # Worktrees
 .worktrees/
 
+# Temporary
+tmp/
+
 # Machine-local artifacts created by bootstrap.sh (symlink, not repo content)
 tooling/bin/dev-stack
