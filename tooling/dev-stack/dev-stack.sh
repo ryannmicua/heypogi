@@ -642,13 +642,15 @@ do_startup() {
                 ensure_env_file_lines() {
                     local target="$1"
                     local env_lines=(
-                        "EnvironmentFile=-$HOME/.config/heypogi/.env-common"
-                        "EnvironmentFile=-$HOME/.config/heypogi/.env-override"
-                        "EnvironmentFile=-$HOME/.config/heypogi/.env-secrets"
+                        "EnvironmentFile=-%h/.config/heypogi/.env-common"
+                        "EnvironmentFile=-%h/.config/heypogi/.env-override"
+                        "EnvironmentFile=-%h/.config/heypogi/.env-secrets"
                     )
                     local added=0
                     for line in "${env_lines[@]}"; do
-                        if ! grep -qF "$line" "$target" 2>/dev/null; then
+                        local suffix
+                        suffix=$(echo "$line" | sed 's|.*EnvironmentFile=-%h||')
+                        if ! grep -q "EnvironmentFile=-.*${suffix}" "$target" 2>/dev/null; then
                             sudo sed -i "/^ExecStart=/i $line" "$target"
                             added=$((added+1))
                         fi

@@ -21,6 +21,7 @@ venv/
 # Logs and temp
 *.log
 *.tmp
+tmp/
 
 # Editors
 .idea/
