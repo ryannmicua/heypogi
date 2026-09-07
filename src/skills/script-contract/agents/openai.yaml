@@ -1,0 +1,7 @@
+interface:
+  display_name: "Script Contract"
+  short_description: "Engineer safe, composable scripts in any language."
+  default_prompt: "Use $script-contract to write or review this script against the repository's general scripting standard."
+
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Bash Script Contract"
+  short_description: "Apply the repository's Bash-specific script contract."
+  default_prompt: "Use $bash-script-contract with $script-contract to write or review this Bash script against both repository standards."
+
+policy:
+  allow_implicit_invocation: true

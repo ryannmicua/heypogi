@@ -2,6 +2,8 @@
 
 One-shot script to set up a machine as an AI Agentic Development VM.
 
+Scripts in `bootstrap/` follow the repository's [general script standard](../docs/standards/scripts.md). Bash scripts additionally follow the [Bash script standard](../docs/standards/bash-scripts.md).
+
 ## What This Does
 
 Running `bootstrap.sh` on a machine will:

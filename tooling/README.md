@@ -1,5 +1,7 @@
 # Dev Stack Setup — OpenCode, OpenChamber, Paseo
 
+Scripts in `tooling/` follow the repository's [general script standard](../docs/standards/scripts.md). Bash scripts additionally follow the [Bash script standard](../docs/standards/bash-scripts.md).
+
 This machine runs three always-on developer tools as **npm CLIs** (no desktop
 apps as servers):
 
