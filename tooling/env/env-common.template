@@ -4,10 +4,13 @@
 
 HEYPOGI_ROOT=__REPO_ROOT__
 OPENCODE_CONFIG_DIR=__REPO_ROOT__/dotfiles/opencode
-# Userspace-first PATH: ~/.local/bin holds shims for node, npm, and all
-# globally installed CLIs (paseo, openchamber, axi tools). It must precede
-# /usr/bin so root-owned system copies are never picked up.
+# Userspace-first PATH: ~/.local/bin holds your own scripts and vendor shims;
+# ~/.local/node-bin is a single symlink to the current nvm Node's bin dir, so
+# node, npm, and all globally installed CLIs (paseo, openchamber, axi tools)
+# resolve without per-binary shims and survive Node upgrades by repointing
+# one link (see tooling/bin/symlink-nvm-node-bin.sh). Both must precede /usr/bin
+# so root-owned system copies are never picked up.
 # NOTE: setup-env.sh expands $HOME below to an absolute path at generation
 # time, because this file is also read by systemd user units
 # (EnvironmentFile=) and systemd performs no $VAR expansion.
-PATH=$HOME/.local/bin:$HOME/.opencode/bin:__REPO_ROOT__/tooling/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+PATH=$HOME/.local/bin:$HOME/.local/node-bin:$HOME/.opencode/bin:__REPO_ROOT__/tooling/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin

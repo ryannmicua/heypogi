@@ -40,7 +40,7 @@ Because the paseo binary's shebang is `#!/usr/bin/env -S node --disable-warning=
 
 Two-part fix, both in the working tree (uncommitted as of 2026-09-06; re-verify after commit):
 
-**Part 1 - unit uses `%h` specifiers and forces `PATH` last as belt-and-braces.** `tooling/dev-stack/paseo.service:21-22` sets `WorkingDirectory=%h` and `ExecStart=%h/.local/bin/paseo daemon start --listen 0.0.0.0:6767 --web-ui --foreground`; `tooling/dev-stack/paseo.service:26-30` sets `HOME`/`PASEO_HOME` via `%h` and then loads the three env files; `tooling/dev-stack/paseo.service:35` forces `Environment=PATH=%h/.local/bin:%h/.opencode/bin:/usr/bin:/bin` last, with the comment at `tooling/dev-stack/paseo.service:31-33` noting systemd expands `%h` but NOT `$HOME/~`.
+**Part 1 - unit uses `%h` specifiers and forces `PATH` last as belt-and-braces.** `tooling/dev-stack/paseo.service:21-22` sets `WorkingDirectory=%h` and `ExecStart=%h/.local/node-bin/paseo daemon start --listen 0.0.0.0:6767 --web-ui --foreground`; `tooling/dev-stack/paseo.service:26-30` sets `HOME`/`PASEO_HOME` via `%h` and then loads the three env files; `tooling/dev-stack/paseo.service:36` forces `Environment=PATH=%h/.local/bin:%h/.local/node-bin:%h/.opencode/bin:/usr/bin:/bin` last, with the comment at `tooling/dev-stack/paseo.service:31-33` noting systemd expands `%h` but NOT `$HOME/~`.
 
 **Part 2 - `setup-env.sh` renders `$HOME` to an absolute path at generation time.** `tooling/env/setup-env.sh:45-48` expands both `__REPO_ROOT__` and `$HOME` via `sed` when generating `~/.config/heypogi/.env-common`, with the comment explaining the generated file is sourced by bash AND read by systemd `EnvironmentFile=`, which per the in-tree comments performs no `$VAR` expansion. The template documents the same constraint at `tooling/env/env-common.template:10-12`, warning that `$HOME` is expanded at generation time because systemd performs no `$VAR` expansion.
 
@@ -54,7 +54,7 @@ Two-part fix, both in the working tree (uncommitted as of 2026-09-06; re-verify 
 ## Prevention
 
 - Never put `$HOME`, `$VAR`, or `~` references in any file consumed via systemd `EnvironmentFile=`; per this session's observation systemd performs no such expansion. Keep the generator-side expansion in `tooling/env/setup-env.sh:48` and the warning comment in `tooling/env/env-common.template:10-12` in sync.
-- Keep unit paths on `%h` specifiers (e.g. `tooling/dev-stack/paseo.service:21`, `tooling/dev-stack/paseo.service:26`, `tooling/dev-stack/paseo.service:35`) and never switch them to `$HOME` form.
+- Keep unit paths on `%h` specifiers (e.g. `tooling/dev-stack/paseo.service:21`, `tooling/dev-stack/paseo.service:26`, `tooling/dev-stack/paseo.service:36`) and never switch them to `$HOME` form.
 - After any env-file or unit change, verify the running process, not just the unit definition: compare `systemctl --user show -p Environment` against `/proc/<pid>/environ` and `readlink /proc/<pid>/exe`, since, per this session's observation above, the two can diverge when `EnvironmentFile=` overrides `Environment=`.
 
 ## Related

@@ -37,7 +37,7 @@ set -euo pipefail
 # the user-owned shims resolve even when the caller has a minimal PATH
 # (cron, scripts, non-interactive shells). System copies in /usr/bin are
 # only ever a fallback and must never shadow ~/.local/bin.
-for _dir in "$HOME/.local/bin" "$HOME/.opencode/bin"; do
+for _dir in "$HOME/.local/bin" "$HOME/.local/node-bin" "$HOME/.opencode/bin"; do
     case ":$PATH:" in
         *":$_dir:"*) ;;
         *) export PATH="$_dir:$PATH" ;;
@@ -161,7 +161,7 @@ ensure_user_bus() {
 }
 
 # npm install -g wrapper: the global prefix must be user-owned (nvm version
-# dir via ~/.local/bin shims - see tooling/bin/userspace-shims.sh). This
+# dir via ~/.local/node-bin - see tooling/bin/symlink-nvm-node-bin.sh). This
 # function never escalates to sudo; on failure it explains how to fix the
 # userspace layout instead.
 npm_install_global() {
@@ -177,7 +177,7 @@ npm_install_global() {
     if [[ -n "$npm_prefix" && ! -w "$npm_prefix" ]]; then
         echo_err "Global npm prefix '$npm_prefix' is not writable and this script will not use sudo."
         echo_err "Fix the userspace layout, then retry:"
-        echo_err "  ./tooling/bin/userspace-shims.sh   # re-point ~/.local/bin shims at the nvm default node"
+        echo_err "  ./tooling/bin/symlink-nvm-node-bin.sh   # re-point ~/.local/node-bin at the nvm default node"
         echo_err "  npm config get prefix               # must resolve to a user-owned dir (nvm version dir)"
     fi
     return $exit_code

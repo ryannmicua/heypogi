@@ -19,7 +19,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=%h
-ExecStart=%h/.local/bin/paseo daemon start --listen 0.0.0.0:6767 --web-ui --foreground
+ExecStart=%h/.local/node-bin/paseo daemon start --listen 0.0.0.0:6767 --web-ui --foreground
 Restart=always
 RestartSec=10
 Environment=NODE_ENV=production
@@ -31,8 +31,9 @@ EnvironmentFile=-%h/.config/heypogi/.env-secrets
 # PATH last: EnvironmentFile entries override Environment=, and the env files
 # are bash-oriented, so force the userspace-first PATH here. NOTE: systemd
 # expands %h but NOT $HOME/~ - always use the specifier syntax in units.
+# (%h/.local/node-bin is a symlink to the current nvm Node's bin dir.)
 
-Environment=PATH=%h/.local/bin:%h/.opencode/bin:/usr/bin:/bin
+Environment=PATH=%h/.local/bin:%h/.local/node-bin:%h/.opencode/bin:/usr/bin:/bin
 
 [Install]
 WantedBy=default.target
