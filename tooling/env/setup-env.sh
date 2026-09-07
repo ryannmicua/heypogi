@@ -235,6 +235,7 @@ do_install() {
 
     if [[ -f "$ENV_COMMON" ]] && [[ "$FORCE" != true ]]; then
         if cmp -s "$tmp_common" "$ENV_COMMON"; then
+            rm -f "$tmp_common"
             log_ok ".env-common: unchanged, skipping"
         else
             mv "$tmp_common" "$ENV_COMMON"
