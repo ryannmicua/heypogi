@@ -1110,11 +1110,12 @@ do_startup() {
                         if [[ "$DRY_RUN" == true ]]; then
                             dry_echo "$SHIMS install -q (+ --dry-run passthrough)"
                         else
-                            if ! bash "$SHIMS" install -q; then
+                            bash "$SHIMS" install -q || {
+                                startup_rc=$?
                                 echo_err "userspace-shims install failed; refusing to enable the unit over an unprovisioned path."
-                                startup_rc=1
+                                [[ "$startup_rc" -eq 0 ]] && startup_rc=1
                                 continue
-                            fi
+                            }
                         fi
                         if [[ "$DRY_RUN" != true ]] && ! command -v paseo >/dev/null 2>&1; then
                             echo_err "paseo does not resolve on the userspace PATH (blocker)."
@@ -1125,14 +1126,19 @@ do_startup() {
                         ensure_paseo_env_allowlist || { startup_rc=$?; continue; }
                         if [[ -f "$SERVICE_FILE" ]]; then
                             if startup_ensure_allowlist_lines "$SERVICE_FILE"; then
-                                echo_success "Paseo user service already converged"
+                                if [[ "$DRY_RUN" == true ]]; then
+                                    dry_echo "unit $SERVICE_FILE already converged (no writes)"
+                                else
+                                    echo_success "Paseo user service already converged"
+                                fi
                             else
                                 if [[ "$DRY_RUN" != true ]]; then
                                     systemctl --user daemon-reload
+                                    echo_success "Paseo user service updated (allowlist, no whole-secrets)"
                                 else
                                     dry_echo "systemctl --user daemon-reload"
+                                    dry_echo "unit $SERVICE_FILE would be updated (allowlist, no whole-secrets)"
                                 fi
-                                echo_success "Paseo user service updated (allowlist, no whole-secrets)"
                             fi
                         elif [[ -f "$TEMPLATE" ]]; then
                             if [[ "$DRY_RUN" == true ]]; then
@@ -1154,14 +1160,19 @@ do_startup() {
                     fix)
                         if [[ -f "$SERVICE_FILE" ]]; then
                             if startup_ensure_allowlist_lines "$SERVICE_FILE"; then
-                                echo_success "Paseo user service already converged"
+                                if [[ "$DRY_RUN" == true ]]; then
+                                    dry_echo "unit $SERVICE_FILE already converged (no writes)"
+                                else
+                                    echo_success "Paseo user service already converged"
+                                fi
                             else
                                 if [[ "$DRY_RUN" != true ]]; then
                                     systemctl --user daemon-reload
+                                    echo_success "Paseo user service fixed (allowlist, no whole-secrets)"
                                 else
                                     dry_echo "systemctl --user daemon-reload"
+                                    dry_echo "unit $SERVICE_FILE would be fixed (allowlist, no whole-secrets)"
                                 fi
-                                echo_success "Paseo user service fixed (allowlist, no whole-secrets)"
                             fi
                             ensure_paseo_env_allowlist || startup_rc=$?
                         else
