@@ -1,6 +1,31 @@
 # Dev Stack Setup — OpenCode, OpenChamber, Paseo
 
 Scripts in `tooling/` follow the repository's [general script standard](../docs/standards/scripts.md). Bash scripts additionally follow the [Bash script standard](../docs/standards/bash-scripts.md).
+Contract details live in the `script-contract` + `bash-script-contract`
+skills (`src/skills/`).
+
+## Linux: bootstrap delegation (2026-09-07)
+
+`bootstrap/bootstrap.sh` is a thin orchestrator: arg parsing, env-first
+ordering, `--skip-*` mapping, `--user` target context, run-history
+markers, and `status` aggregation. All install logic lives here, in
+`tooling/`, one owner per state:
+
+| Domain | Owner scripts | Owns |
+|--------|---------------|------|
+| `env/` | `setup-env.sh` (+ `require-env.sh` sourced guard) | `~/.config/heypogi/.env-{common,override,secrets}`, `.bashrc` marker block; every dependent gates on the guard before mutating |
+| `machine/` | `check-prereqs.sh`, `install-{claude,codex,gh}-cli.sh` | System checks (node/npm/curl/git/docker/uv/AVX) + CLI installers; narrow sudo for apt only |
+| `sources/` | `clone-*.sh` via `update-external-repos.sh` | `external/` checkouts, acquired before skills; failures propagate |
+| `skills/` | `install-{skills,ce-skills,knowledge-skills}.sh` | `~/.agents/skills/*` symlinks (correct link = no-op; conflicting dirs never removed) |
+| `bin/` | `userspace-shims.sh` (+ PATH entry points) | `~/.local/bin`, `~/.local/node-bin`, npm prefix, CLI shims the rootless unit needs |
+| `dev-stack/` | `dev-stack.sh` (+ `paseo.service` user-unit template) | Paseo config seed (additive, password-preserving merge), rootless user unit, legacy system-unit migration, linger ownership, fail-closed bind, `~/.config/heypogi/.env-paseo` secrets allowlist |
+
+Every bootstrap-callable script supports `status` (default, read-only) /
+`install` with `-f`/`-q`/`--dry-run` and exits 0 converged, 1 drift/failed,
+2 usage error, 3 blocked. `--dry-run` writes nothing (no marker, logs,
+or child mutations). Paseo binds `0.0.0.0` only with `PASEO_PASSWORD` set.
+
+## Windows setup (dev-stack.ps1)
 
 This machine runs three always-on developer tools as **npm CLIs** (no desktop
 apps as servers):
@@ -101,16 +126,19 @@ steps, which is why `status` verifies them explicitly.
 ## Layout — organized by domain
 
 Each domain folder is self-contained: docs sit next to their scripts.
-`bin/` holds only PATH entry points (wired by `bootstrap/bootstrap.sh` and
-`setup-environment.ps1`) that point into the domains.
+`bin/` holds PATH entry points (wired by `bootstrap/bootstrap.sh` and
+`setup-environment.ps1`) that point into the domains, plus
+`userspace-shims.sh` (userspace PATH provisioning for the Linux
+rootless unit).
 
 | Domain | Contents |
 |--------|----------|
-| [`stack/`](stack/) | Always-on dev services (OpenCode, OpenChamber, Paseo): supervisor + per-tool ctl scripts and docs, `openchamber.settings.json` template |
-| [`machine/`](machine/) | Provisioning this box: environment setup, Codex CLI installation, PowerShell profile, GitHub App agent identity (`github-app-identity.sh`, token CLI, credential helper, config template) |
+| [`dev-stack/`](dev-stack/) | Always-on dev services (OpenCode, OpenChamber, Paseo): Linux supervisor `dev-stack.sh` + `paseo.service` user-unit template, Windows `dev-stack.ps1` + per-tool ctl scripts and docs, `openchamber.settings.json` template |
+| [`machine/`](machine/) | Provisioning this box: Linux `check-prereqs.sh` + `install-{claude,codex,gh}-cli.sh`, PowerShell profile, GitHub App agent identity (`github-app-identity.sh`, token CLI, credential helper, config template) |
+| [`env/`](env/) | heypogi env owner: `setup-env.sh`, `require-env.sh` sourced guard, templates |
 | [`sources/`](sources/) | External reference repos: clone scripts, status/recording helpers |
 | [`skills/`](skills/) | Installing skill collections into the agent environment |
-| `bin/` | PATH entry points only (`dev-stack`) |
+| `bin/` | PATH entry points (`dev-stack`) + `userspace-shims.sh` + `symlink-nvm-node-bin.sh` |
 
 ## Related docs
 

@@ -13,7 +13,9 @@
 #                                [-q|--quiet] [--dry-run] [-h|--help]
 #
 # Managed state: ~/.local/bin/, ~/.local/node-bin symlink,
-#   ~/.local/bin/{paseo,openchamber,opencode} symlinks.
+#   ~/.local/bin/{paseo,openchamber,opencode} symlinks, and the
+#   tooling/bin/dev-stack entry point (git-ignored by decision, so it
+#   is converged here instead of committed).
 # Privilege: none (userspace only; never sudo). Network: none.
 # Exit codes: 0 converged, 1 drift/failed, 2 usage error, 3 blocked
 #   (no nvm Node available, npm prefix not user-owned).
@@ -91,6 +93,10 @@ LOCAL_BIN="$HOME/.local/bin"
 NODE_BIN_LINK="$HOME/.local/node-bin"
 SYMLINK_SCRIPT="$SCRIPT_DIR/symlink-nvm-node-bin.sh"
 SHIM_TOOLS=(paseo openchamber opencode)
+# Repo entry point: git-ignored by decision (.gitignore), converged here.
+REPO_BIN_DIR="$(cd "$SCRIPT_DIR" && pwd -P)"
+DEVSTACK_LINK="$REPO_BIN_DIR/dev-stack"
+DEVSTACK_TARGET="../dev-stack/dev-stack.sh"
 
 resolve() { cd "$1" 2>/dev/null && pwd -P || printf '%s' "$1"; }
 
@@ -98,6 +104,12 @@ npm_prefix() { npm config get prefix 2>/dev/null || echo ""; }
 
 do_status() {
     local drift=0
+    if [[ -L "$DEVSTACK_LINK" && "$(readlink "$DEVSTACK_LINK")" == "$DEVSTACK_TARGET" ]]; then
+        log_ok "tooling/bin/dev-stack entry point converged"
+    else
+        log_warn "tooling/bin/dev-stack entry point missing or wrong."
+        drift=1
+    fi
     if [[ -d "$LOCAL_BIN" ]]; then
         log_ok "$HOME/.local/bin present"
     else
@@ -187,12 +199,19 @@ ensure_shim() {
 do_install() {
     if [[ "$DRY_RUN" == true ]]; then
         log_dry "mkdir -p $LOCAL_BIN"
-        log_dry "bash $SYMLINK_SCRIPT (repoint ~/.local/node-bin at nvm default Node)"
+        log_dry "bash $SYMLINK_SCRIPT (repoint $HOME/.local/node-bin at nvm default Node)"
         log_dry "ln -sfn <node-bin>/<tool> $LOCAL_BIN/<tool> for installed dev-stack CLIs"
+        log_dry "ln -sfn $DEVSTACK_TARGET $DEVSTACK_LINK (repo entry point)"
         log_dry "verify npm prefix is user-owned"
         return 0
     fi
     mkdir -p "$LOCAL_BIN"
+    if [[ ! -L "$DEVSTACK_LINK" || "$(readlink "$DEVSTACK_LINK")" != "$DEVSTACK_TARGET" ]]; then
+        ln -sfn "$DEVSTACK_TARGET" "$DEVSTACK_LINK"
+        log_ok "tooling/bin/dev-stack entry point converged"
+    else
+        log_info "tooling/bin/dev-stack entry point already correct; skipping."
+    fi
     log_info "Repointing ~/.local/node-bin via symlink-nvm-node-bin.sh ..."
     if ! bash "$SYMLINK_SCRIPT"; then
         log_err "symlink-nvm-node-bin.sh failed (no nvm default Node?)."

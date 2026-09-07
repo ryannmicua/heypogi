@@ -27,3 +27,40 @@ When reviewing, trace every argument, exit path, mutation, prompt, subprocess, n
 When asked whether or how to codify work into a script, first decide whether a script is the right boundary. Prefer a script when the operation needs repeatability, automation, a stable CLI, or reproducible state management. Do not introduce a script when a declarative configuration or existing tool is the clearer owner.
 
 Preserve authorization boundaries: reviewing does not authorize edits or mutating tests, and implementing one script does not authorize unrelated normalization.
+
+## Heypogi delegation map (bootstrap refactor, 2026-09-07)
+
+`bootstrap/bootstrap.sh` is an orchestrator: arg parsing, env-first
+ordering, `--skip-*` mapping, `--user` target context, run-history
+markers, and the `status` verb only. All install logic lives in
+`tooling/` leaves, each owning its state through the reconciler
+`status`/`install` interface. Do not reintroduce inline install logic
+into the orchestrator, and do not let leaves duplicate each other's
+state.
+
+Ownership:
+
+- `tooling/env/setup-env.sh` owns env files; `tooling/env/require-env.sh`
+  (sourced guard, never executed) gates every dependent before mutation.
+  Bootstrap's own pre-env phase is the single guard exception.
+- `tooling/machine/` owns system checks and CLI installers. Only apt,
+  linger, and legacy-unit removal may use narrowly scoped sudo (logged,
+  dry-run aware); user-scoped work runs as the target user and is never
+  run wholesale as root.
+- `tooling/sources/` checkouts are acquired before skill installers run;
+  absent unacquirable sources are WARN + exit 1, never a silent pass.
+- `tooling/dev-stack/dev-stack.sh` owns Paseo config seeding (additive,
+  password-preserving merge), the rootless user unit, legacy system-unit
+  migration, linger ownership (exit 3 when unprivileged and off), the
+  fail-closed remote bind (no password, no `0.0.0.0`), and the
+  Paseo-specific secrets allowlist (the unit never loads the whole
+  secrets file).
+- `tooling/bin/userspace-shims.sh` owns the userspace PATH layout the
+  rootless unit depends on and runs before the unit install.
+
+Result model: 0 converged/no-op, 1 drift/failed/incomplete, 2 usage
+error, 3 indeterminate/blocked. Registry/network unreachability is
+exit 3, never suppressed; `status` distinguishes drift (1) from
+indeterminate-offline (3). Marker writes (bootstrap run history) are
+the single declared idempotency exception, serialized and
+trap-finalized; everything else converges silently on re-run.

@@ -1,22 +1,46 @@
 # Heypogi Bootstrap
 
-One-shot script to set up a machine as an AI Agentic Development VM.
+Thin orchestrator that converges a machine into an AI Agentic
+Development VM by delegating to `tooling/`. Bootstrap owns ordering,
+flag mapping, target context, run history, and status aggregation only
+- all install logic lives in the leaves.
 
 Scripts in `bootstrap/` follow the repository's [general script standard](../docs/standards/scripts.md). Bash scripts additionally follow the [Bash script standard](../docs/standards/bash-scripts.md).
+Contract details live in the `script-contract` + `bash-script-contract`
+skills (`src/skills/`).
+
+## Ownership map
+
+| Area | Owner |
+|------|-------|
+| Env files + marker block | `tooling/env/setup-env.sh` (gated by `tooling/env/require-env.sh`) |
+| System checks (node/npm/curl/git/docker/uv/AVX) | `tooling/machine/check-prereqs.sh` |
+| Claude / Codex / gh installers | `tooling/machine/install-{claude,codex,gh}-cli.sh` |
+| External checkouts (acquired before skills) | `tooling/sources/clone-*.sh` via `update-external-repos.sh` |
+| Skill links | `tooling/skills/install-*.sh` |
+| Userspace PATH layout (before the unit install) | `tooling/bin/userspace-shims.sh` |
+| Paseo config seed/merge, user unit, legacy migration, linger, fail-closed bind, secrets allowlist | `tooling/dev-stack/dev-stack.sh` |
 
 ## What This Does
 
-Running `bootstrap.sh` on a machine will:
+Running `bootstrap.sh` executes, in env-first order:
 
-1. **Verify prerequisites** — checks for Node.js 22+, npm, git, curl, Docker, uv
-2. **Install AI agent CLIs** — Claude Code (Anthropic), Codex CLI (OpenAI), GitHub CLI
-3. **Install the Dev Stack** — delegates to `tooling/dev-stack/dev-stack.sh install -a all`
-   to install/update OpenCode, Paseo, and OpenChamber, so bootstrap never duplicates
-   dev-stack's install logic
-4. **Configure heypogi environment** — sets `HEYPOGI_ROOT`, `OPENCODE_CONFIG_DIR`, installs skills
-5. **Configure Paseo** — daemon config, orchestration preferences, systemd service
-6. **Install dev-stack** — management script for services; also starts Paseo via
-   `dev-stack.sh start -a paseo` once the systemd service is enabled
+1. **Environment** — `setup-env.sh install` (creates the env; the single
+   pre-guard phase)
+2. **Prerequisites** — `check-prereqs.sh install` (apt-installs
+   curl/git/bubblewrap/uv; Node.js, Docker, AVX are fail-closed blockers)
+3. **Userspace shims** — `userspace-shims.sh install` (node-bin link, npm
+   prefix, CLI shims for the rootless unit)
+4. **AI agent CLIs** — `install-{claude,codex,gh}-cli.sh install`
+5. **External sources** — `update-external-repos.sh -f` (before skills)
+6. **Dev Stack** — `dev-stack.sh install` (incl. additive Paseo seed)
+7. **Skills** — `install-{skills,ce-skills,knowledge-skills}.sh install --create-dest`
+8. **Startup + start** — `dev-stack.sh startup install -a paseo` (legacy
+   migration, linger, allowlist) then `start -a paseo`
+9. **Marker** — appends `ISO8601-ts | user | repo-root | git-sha | args | exit-code`
+   to `~/.config/heypogi/.bootstrap-runs.log` (+ atomic last-run file),
+   trap-finalized and `flock`-serialized. Skipped under `--dry-run`;
+   marker-write failure is a WARN, never the run's exit code.
 
 After bootstrapping, the machine will have:
 - `claude` — Anthropic's coding agent
@@ -38,8 +62,8 @@ The machine must have:
 | **npm** | Package manager for agent CLIs | Comes with Node.js |
 | **git** | Clone repos, version control | `sudo apt install -y git` |
 | **curl** | Download installers | `sudo apt install -y curl` |
-| **Docker** (optional) | Container workloads | Install via Docker's official repo |
-| **uv** (optional) | Python package manager | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| **Docker** | Fail-closed blocker (checked, never provisioned) | Install via Docker's official repo |
+| **uv** | Installed via official script when missing | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | **Internet access** | Download tools | Required |
 | **sudo privileges** | Install packages, systemd | Required |
 
@@ -51,7 +75,7 @@ node --version   # Should be v22.x.x
 npm --version    # Should be 10.x.x
 git --version    # Any recent version
 curl --version   # Any recent version
-docker --version # Optional but recommended
+docker --version # Required (blocker with remediation when missing)
 uv --version     # Optional but recommended
 grep avx /proc/cpuinfo || echo "NO AVX - OpenCode will crash, fix the VM's CPU type first"
 ```
@@ -72,13 +96,20 @@ cd ~/repo/heypogi
 ./bootstrap/bootstrap.sh --force
 ```
 
-### Skip specific components
+### Skip specific components (exhaustive flag mapping)
+
+| Flag | Skips | Notes |
+|------|-------|-------|
+| `--skip-agents` | `install-{claude,codex,gh}` only | dev-stack CLIs unaffected |
+| `--skip-paseo` | dev-stack Paseo install + Paseo seed + user-unit startup/start | opencode/openchamber still installed |
+| `--skip-dotfiles` | `setup-env install` | Requires pre-existing env (exit 3 otherwise - a precondition, not a pass) |
+| `--skip-services` | `startup install` + `start` only | packages + seed still converge |
 
 ```bash
-./bootstrap/bootstrap.sh --skip-agents     # Skip Claude/Codex/OpenCode
-./bootstrap/bootstrap.sh --skip-paseo      # Skip Paseo/OpenChamber
-./bootstrap/bootstrap.sh --skip-dotfiles   # Skip heypogi env vars
-./bootstrap/bootstrap.sh --skip-services   # Skip systemd setup
+./bootstrap/bootstrap.sh --skip-agents     # Skip Claude/Codex/gh
+./bootstrap/bootstrap.sh --skip-paseo      # Skip Paseo entirely
+./bootstrap/bootstrap.sh --skip-dotfiles   # Skip heypogi env (needs existing env)
+./bootstrap/bootstrap.sh --skip-services   # Skip systemd setup + start
 ```
 
 ### Target different user
@@ -87,11 +118,27 @@ cd ~/repo/heypogi
 ./bootstrap/bootstrap.sh --user ssdadmin
 ```
 
-### Dry run
+`--user TARGET` runs every leaf as TARGET (`sudo -u` down-switch when
+privileged): user-scoped state lands in `~TARGET` with `XDG_RUNTIME_DIR=/run/user/<uid>`,
+a userspace-first PATH, and the systemd user bus for TARGET. Only apt,
+linger, and legacy-unit removal use sudo (logged, dry-run aware). Root
+without `--user` is rejected - leaves are never run wholesale as root.
+
+### Dry run (zero writes, incl. marker/logs/children)
 
 ```bash
 ./bootstrap/bootstrap.sh --dry-run
+./bootstrap/bootstrap.sh --force --dry-run   # plan the full converge
 ```
+
+### Status (last run + downstream convergence)
+
+```bash
+./bootstrap/bootstrap.sh status
+```
+
+Reports the last recorded run and aggregates every leaf `status`
+(0 converged / 1 drift / 3 blocked).
 
 ## After Bootstrapping
 
@@ -131,24 +178,32 @@ dev-stack restart     # Restart all
 dev-stack install     # Update tools to latest
 ```
 
-Or manage directly via systemd:
+Or manage directly via systemd (user units, no sudo):
 
 ```bash
-sudo systemctl status paseo.service
-sudo systemctl start paseo.service
-sudo systemctl stop paseo.service
-journalctl -u paseo.service -f    # Tail logs
+systemctl --user status paseo.service
+systemctl --user start paseo.service
+systemctl --user stop paseo.service
+journalctl --user -u paseo.service -f    # Tail logs
 ```
+
+One-time (requires sudo, owned by `startup install`): `sudo loginctl enable-linger <user>`.
 
 ## Files
 
 ```
 bootstrap/
 ├── README.md          # This file
-└── bootstrap.sh       # Main bootstrap script
+├── OPENITEMS.md       # Residual work + resolved decisions
+└── bootstrap.sh       # Orchestrator (delegates to tooling/)
 
-tooling/{stack,machine,sources,skills}/
-└── dev-stack.sh       # Service management (installed by bootstrap.sh)
+tooling/
+├── env/               # Env owner (setup-env) + require-env guard
+├── machine/           # check-prereqs + install-{claude,codex,gh}-cli
+├── sources/           # External checkouts (acquired before skills)
+├── skills/            # Skill-link reconcilers
+├── bin/               # userspace-shims + PATH entry points
+└── dev-stack/         # Paseo/config/systemd owner + user unit template
 ```
 
 ## Troubleshooting
@@ -174,11 +229,11 @@ a plain non-interactive SSH command. Finish it yourself from an actual interacti
 curl -fsSL https://claude.ai/install.sh | bash
 ```
 
-**Paseo daemon won't start / `systemctl status` shows a high, climbing restart count**
+**Paseo daemon won't start / `systemctl --user status` shows a high, climbing restart count**
 ```bash
-journalctl -u paseo.service -n 50
+journalctl --user -u paseo.service -n 50
 cat ~/.paseo/config.json
-sudo systemctl restart paseo.service
+systemctl --user restart paseo.service
 ```
 A high `NRestarts` count usually means `ExecStart` is missing `--foreground` — without it,
 `paseo daemon start` forks and exits immediately, and a `Type=simple` unit treats that as the

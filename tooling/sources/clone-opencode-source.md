@@ -37,10 +37,11 @@ Run from the repo root:
 bash tooling/sources/clone-opencode-source.sh
 ```
 
-To suppress prompts:
+To pull latest without prompting (e.g. for scripting), pass `-f`/`--force`;
+`-q`/`--quiet` only silences output and never implies consent:
 
 ```bash
-bash tooling/sources/clone-opencode-source.sh --quiet
+bash tooling/sources/clone-opencode-source.sh -f -q
 ```
 
 ## Verify
@@ -67,7 +68,7 @@ You should see `opencode-source` with a path under `<repo_root>\external\opencod
 ## Notes
 
 - The `external/opencode/` directory is in `.gitignore` — it is not committed to this repo.
-- Re-running the script prompts to pull latest instead of re-cloning.
+- Re-running the script prompts to pull latest instead of re-cloning (non-interactive runs skip the pull unless `-f` is given).
 - Successful clones/pulls record branch, commit, and timestamp in the local
   freshness ledger `external/.repo-update-status.json`, which
   [`get-external-repo-status`](get-external-repo-status.ps1) reads.
