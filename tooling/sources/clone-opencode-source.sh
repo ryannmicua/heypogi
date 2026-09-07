@@ -1,25 +1,59 @@
 #!/usr/bin/env bash
+#=======================================================================
+# Script:    clone-opencode-source.sh
+# Purpose:   Ensure the OpenCode source checkout exists at external/opencode/
+#            (clone on first run, pull latest only with -f/--force or
+#            interactive approval). Called before the CE/knowledge skill
+#            installers by bootstrap/bootstrap.sh (R26 ordering).
+# Usage:     clone-opencode-source.sh [-f|--force] [-q|--quiet] [--dry-run] [-h|--help]
+#
+# Managed state: external/opencode/ git checkout (+ freshness ledger via
+#   record-external-repo-update.sh).
+# Network: https://github.com/anomalyco/opencode.git (clone/pull only; HTTPS, finite timeouts).
+#   Unreachable remote is a blocker (exit 3), never suppressed.
+# Privilege: none. Exit codes: 0 present/converged, 1 failed,
+#   2 usage error, 3 blocked (offline).
+# NOTE: -q/--quiet controls output only; use -f/--force for
+#   non-interactive pulls (quiet never implies consent).
+#=======================================================================
 set -euo pipefail
 
-quiet=0
+FORCE=false
+QUIET=false
+DRY_RUN=false
+
+log_info() { [[ "$QUIET" == true ]] && return 0; printf 'INFO: %s\n' "$*"; }
+log_ok() { [[ "$QUIET" == true ]] && return 0; printf 'OK: %s\n' "$*"; }
+log_warn() { printf 'WARN: %s\n' "$*" >&2; }
+log_err() { printf 'ERROR: %s\n' "$*" >&2; }
+log_dry() { printf 'DRY-RUN: %s\n' "$*"; }
 
 usage() {
   cat <<'EOF'
 Clones the OpenCode source repository into external/opencode/.
 
 Usage:
-  bash tooling/sources/clone-opencode-source.sh [--quiet]
+  bash tooling/sources/clone-opencode-source.sh [-f|--force] [-q|--quiet] [--dry-run] [-h|--help]
 
 Options:
-  --quiet  Pull without prompting; ensure the repo is present
+  -f, --force   Pull latest when already cloned (no prompt).
+  -q, --quiet   Suppress INFO/OK chatter (never implies consent).
+  --dry-run     Print the clone/pull plan without network or writes.
+  -h, --help    Show this help (side-effect-free).
+
+Exit codes: 0 present/converged, 1 failed, 2 usage error, 3 blocked.
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --quiet) quiet=1; shift ;;
+    -f|--force) FORCE=true; shift ;;
+    -q|--quiet) QUIET=true; shift ;;
+    --dry-run) DRY_RUN=true; shift ;;
     -h|--help) usage; exit 0 ;;
-    *) echo "Unknown argument: $1" >&2; usage; exit 2 ;;
+    --) shift; while [[ $# -gt 0 ]]; do log_err "Unexpected argument: $1"; usage >&2; exit 2; done ;;
+    -*) log_err "Unknown option: $1"; usage >&2; exit 2 ;;
+    *) log_err "Unexpected argument: $1"; usage >&2; exit 2 ;;
   esac
 done
 
@@ -28,7 +62,30 @@ repo_root="$(cd "${script_dir}/../.." && pwd -P)"
 external_dir="${repo_root}/external"
 target_dir="${external_dir}/opencode"
 clone_url="https://github.com/anomalyco/opencode.git"
+clone_args=""
 status_recorder="${script_dir}/record-external-repo-update.sh"
+
+remote_reachable() {
+  curl -fsSI --connect-timeout 10 --max-time 15 https://github.com >/dev/null 2>&1
+}
+
+git_net() {
+  # Finite-timeout git wrapper so offline runs fail fast, not hung.
+  if command -v timeout >/dev/null 2>&1; then
+    timeout 120 git "$@"
+  else
+    git "$@"
+  fi
+}
+
+if [[ "$DRY_RUN" == true ]]; then
+  if [[ -d "${target_dir}/.git" ]]; then
+    log_dry "git -C ${target_dir} pull (+ record freshness)"
+  else
+    log_dry "git clone ${clone_args} ${clone_url} ${target_dir} (+ record freshness)"
+  fi
+  exit 0
+fi
 
 if [[ ! -d "${external_dir}" ]]; then
   mkdir -p "${external_dir}"
@@ -37,29 +94,43 @@ fi
 did_update=0
 if [[ -d "${target_dir}" ]]; then
   if [[ ! -d "${target_dir}/.git" ]]; then
-    echo "${target_dir} exists but is not a git repository. Remove it manually and re-run." >&2
+    log_err "${target_dir} exists but is not a git repository. Remove it manually and re-run."
     exit 1
   fi
-  pull=0
-  if [[ "${quiet}" -eq 1 ]]; then
-    pull=1
-  else
-    printf "OpenCode source already cloned at: %s\n" "${target_dir}"
-    printf "Pull latest? [y/N] "
-    IFS= read -r answer </dev/tty || answer=""
+  pull=false
+  if [[ "$FORCE" == true ]]; then
+    pull=true
+  elif [[ -t 0 ]]; then
+    log_info "OpenCode source already cloned at: ${target_dir}"
+    printf "Pull latest? [y/N] " >&2
+    IFS= read -r answer || answer=""
     answer="$(printf "%s" "${answer}" | tr '[:upper:]' '[:lower:]' | xargs || true)"
-    if [[ "${answer}" == "y" ]]; then
-      pull=1
-    fi
+    [[ "${answer}" == "y" ]] && pull=true
+  else
+    log_info "OpenCode source present at ${target_dir}; skipping pull (non-interactive without -f)."
   fi
-  if [[ "${pull}" -eq 1 ]]; then
-    printf "Pulling latest...\n"
-    git -C "${target_dir}" pull
+  if [[ "$pull" == true ]]; then
+    log_info "Pulling latest..."
+    if ! git_net -C "${target_dir}" pull; then
+      if ! remote_reachable; then
+        log_err "Remote unreachable (offline?). No partial state changed."
+        exit 3
+      fi
+      log_err "git pull failed for OpenCode."
+      exit 1
+    fi
     did_update=1
   fi
 else
-  printf "Cloning opencode source into %s ...\n" "${target_dir}"
-  git clone "${clone_url}" "${target_dir}"
+  log_info "Cloning OpenCode source into ${target_dir} ..."
+  if ! git_net clone  "${clone_url}" "${target_dir}"; then
+    if ! remote_reachable; then
+      log_err "Remote unreachable (offline?). Nothing cloned."
+      exit 3
+    fi
+    log_err "git clone failed for OpenCode."
+    exit 1
+  fi
   did_update=1
 fi
 
@@ -67,7 +138,7 @@ if [[ "${did_update}" -eq 1 ]]; then
   bash "${status_recorder}" --name opencode --repository-path "${target_dir}"
 fi
 
-if [[ "${quiet}" -ne 1 ]]; then
+if [[ "$QUIET" != true ]]; then
   printf "\n"
   printf "OpenCode source: %s\n" "${target_dir}"
   printf "  Branch: "
@@ -78,3 +149,4 @@ if [[ "${quiet}" -ne 1 ]]; then
   printf "  ls %s\n" "${target_dir}"
   printf "  git -C %s log --oneline -3\n" "${target_dir}"
 fi
+log_ok "OpenCode source ensured."

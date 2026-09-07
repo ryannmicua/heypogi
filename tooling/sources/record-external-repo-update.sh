@@ -1,49 +1,78 @@
 #!/usr/bin/env bash
+#=======================================================================
+# Recorder:  record-external-repo-update.sh
+# Purpose:   Internal action/helper (verb-free per KTD2): records an
+#            external repo's branch/commit/remote in
+#            external/.repo-update-status.json. Called by clone-*.sh
+#            after a successful clone/pull; never invoked directly by
+#            bootstrap.
+# Usage:     record-external-repo-update.sh --name <name>
+#              --repository-path <path> [-q|--quiet] [--dry-run]
+#
+# Managed state: external/.repo-update-status.json (atomic temp+mv).
+# Privilege/network: none. Preview: --dry-run prints the plan and
+#   writes nothing. Exit codes: 0 recorded, 1 collection failed,
+#   2 usage error.
+#=======================================================================
 set -euo pipefail
+
+log_info() { [[ "${QUIET:-false}" == true ]] && return 0; printf 'INFO: %s\n' "$*"; }
+log_ok() { [[ "${QUIET:-false}" == true ]] && return 0; printf 'OK: %s\n' "$*"; }
+log_err() { printf 'ERROR: %s\n' "$*" >&2; }
+log_dry() { printf 'DRY-RUN: %s\n' "$*"; }
 
 usage() {
   cat <<'EOF'
 Records an external repo's branch/commit/remote in external/.repo-update-status.json.
 
 Usage:
-  bash tooling/sources/record-external-repo-update.sh --name <name> --repository-path <path>
+  bash tooling/sources/record-external-repo-update.sh --name <name> --repository-path <path> [-q|--quiet] [--dry-run]
 
 Options:
   --name             Key to record under (e.g. opencode). Required.
   --repository-path  Path to the local git clone. Required.
+  -q, --quiet        Suppress INFO/OK chatter.
+  --dry-run          Print the plan without writing the ledger.
+
+Exit codes: 0 recorded, 1 collection failed, 2 usage error.
 EOF
 }
 
 name=""
 repository_path=""
+QUIET=false
+DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --name)
-      [[ $# -ge 2 ]] || { echo "--name requires a value." >&2; exit 1; }
+      [[ $# -ge 2 && -n "${2:-}" && "$2" != -* ]] || { log_err "--name requires a value."; usage >&2; exit 2; }
       name="$2"; shift 2 ;;
     --repository-path)
-      [[ $# -ge 2 ]] || { echo "--repository-path requires a value." >&2; exit 1; }
+      [[ $# -ge 2 && -n "${2:-}" && "$2" != -* ]] || { log_err "--repository-path requires a value."; usage >&2; exit 2; }
       repository_path="$2"; shift 2 ;;
+    -q|--quiet) QUIET=true; shift ;;
+    --dry-run) DRY_RUN=true; shift ;;
     -h|--help) usage; exit 0 ;;
-    *) echo "Unknown argument: $1" >&2; usage; exit 2 ;;
+    --) shift; while [[ $# -gt 0 ]]; do log_err "Unexpected argument: $1"; usage >&2; exit 2; done ;;
+    *) log_err "Unknown argument: $1"; usage >&2; exit 2 ;;
   esac
 done
 
 if [[ -z "${name}" || -z "${repository_path}" ]]; then
-  echo "Both --name and --repository-path are required." >&2
-  echo "" >&2
-  usage
-  exit 1
+  log_err "Both --name and --repository-path are required."
+  log_err ""
+  usage >&2
+  exit 2
 fi
 
 if ! printf '%s' "${name}" | grep -Eq '^[A-Za-z0-9._-]+$'; then
-  echo "Invalid --name '${name}' - use letters, digits, dots, dashes, underscores only." >&2
-  exit 1
+  log_err "Invalid --name '${name}' - use letters, digits, dots, dashes, underscores only."
+  exit 2
 fi
 
 if [[ ! -d "${repository_path}/.git" ]]; then
-  echo "Could not collect update status for ${name}: not a git repository: ${repository_path}" >&2
+  log_err "Could not collect update status for ${name}: not a git repository: ${repository_path}"
   exit 1
 fi
 
@@ -52,7 +81,7 @@ commit="$(git -C "${repository_path}" rev-parse HEAD 2>/dev/null || true)"
 remote="$(git -C "${repository_path}" remote get-url origin 2>/dev/null || true)"
 
 if [[ -z "${branch}" || -z "${commit}" || -z "${remote}" ]]; then
-  echo "Could not collect update status for ${name}." >&2
+  log_err "Could not collect update status for ${name}."
   exit 1
 fi
 
@@ -129,6 +158,11 @@ fi
 
 new_record="${name}"$'\t'"${updated_at}"$'\t'"${branch}"$'\t'"${commit}"$'\t'"${remote}"
 
+if [[ "$DRY_RUN" == true ]]; then
+  log_dry "record ${name}: branch=${branch} commit=${commit} remote=${remote} -> ${status_path}"
+  exit 0
+fi
+
 tmp_status="$(mktemp)"
 trap 'rm -f "${tmp_status}"' EXIT
 
@@ -161,3 +195,4 @@ fi
 } >"${tmp_status}"
 
 mv "${tmp_status}" "${status_path}"
+log_ok "Recorded ${name} -> ${status_path}"
