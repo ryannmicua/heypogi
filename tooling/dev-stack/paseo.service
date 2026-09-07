@@ -1,17 +1,38 @@
+# Paseo systemd USER unit template (userspace, no root required).
+#
+# Install (no sudo):
+#   mkdir -p ~/.config/systemd/user
+#   sed -e "s|__USER__|$(whoami)|g" -e "s|__HOME__|$HOME|g" \
+#     tooling/dev-stack/paseo.service > ~/.config/systemd/user/paseo.service
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now paseo.service
+#
+# For the daemon to survive logout, lingering must be enabled (one-time,
+# requires sudo):  sudo loginctl enable-linger <user>
+#
+# Auth password: set PASEO_PASSWORD in ~/.config/heypogi/.env-secrets
+# (chmod 600). The daemon reads it from the EnvironmentFile lines below.
 [Unit]
-Description=Paseo AI Agent Daemon
+Description=Paseo AI Agent Daemon (userspace)
 After=network.target
 
 [Service]
 Type=simple
-User=__USER__
 WorkingDirectory=%h
-EnvironmentFile=-__HOME__/.config/heypogi/.env-common
-EnvironmentFile=-__HOME__/.config/heypogi/.env-override
-EnvironmentFile=-__HOME__/.config/heypogi/.env-secrets
-ExecStart=/usr/local/bin/paseo daemon start --web-ui --foreground
-Restart=on-failure
-RestartSec=5
+ExecStart=%h/.local/bin/paseo daemon start --listen 0.0.0.0:6767 --web-ui --foreground
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+Environment=HOME=%h
+Environment=PASEO_HOME=%h/.paseo
+EnvironmentFile=-%h/.config/heypogi/.env-common
+EnvironmentFile=-%h/.config/heypogi/.env-override
+EnvironmentFile=-%h/.config/heypogi/.env-secrets
+# PATH last: EnvironmentFile entries override Environment=, and the env files
+# are bash-oriented, so force the userspace-first PATH here. NOTE: systemd
+# expands %h but NOT $HOME/~ - always use the specifier syntax in units.
+
+Environment=PATH=%h/.local/bin:%h/.opencode/bin:/usr/bin:/bin
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

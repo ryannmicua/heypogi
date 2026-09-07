@@ -42,7 +42,10 @@ echo "Rendering .env-common from template..."
 TEMP_COMMON=$(mktemp)
 trap 'rm -f "$TEMP_COMMON"' EXIT
 
-sed "s|__REPO_ROOT__|$REPO_ROOT|g" "$TEMPLATE_COMMON" > "$TEMP_COMMON"
+# Render __REPO_ROOT__ and $HOME to absolute paths. The generated file is
+# sourced by bash AND read by systemd user units via EnvironmentFile=, and
+# systemd performs no $VAR expansion - so no $HOME references may remain.
+sed -e "s|__REPO_ROOT__|$REPO_ROOT|g" -e "s|\$HOME|$HOME|g" "$TEMPLATE_COMMON" > "$TEMP_COMMON"
 
 if [[ -f "$ENV_COMMON" ]]; then
     if cmp -s "$TEMP_COMMON" "$ENV_COMMON"; then

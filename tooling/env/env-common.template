@@ -4,4 +4,10 @@
 
 HEYPOGI_ROOT=__REPO_ROOT__
 OPENCODE_CONFIG_DIR=__REPO_ROOT__/dotfiles/opencode
-PATH=__REPO_ROOT__/tooling/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+# Userspace-first PATH: ~/.local/bin holds shims for node, npm, and all
+# globally installed CLIs (paseo, openchamber, axi tools). It must precede
+# /usr/bin so root-owned system copies are never picked up.
+# NOTE: setup-env.sh expands $HOME below to an absolute path at generation
+# time, because this file is also read by systemd user units
+# (EnvironmentFile=) and systemd performs no $VAR expansion.
+PATH=$HOME/.local/bin:$HOME/.opencode/bin:__REPO_ROOT__/tooling/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin

@@ -33,6 +33,18 @@
 #=======================================================================
 set -euo pipefail
 
+# Userspace-first PATH: this script manages a rootless stack, so make sure
+# the user-owned shims resolve even when the caller has a minimal PATH
+# (cron, scripts, non-interactive shells). System copies in /usr/bin are
+# only ever a fallback and must never shadow ~/.local/bin.
+for _dir in "$HOME/.local/bin" "$HOME/.opencode/bin"; do
+    case ":$PATH:" in
+        *":$_dir:"*) ;;
+        *) export PATH="$_dir:$PATH" ;;
+    esac
+done
+unset _dir
+
 # --- Constants ---
 OPENCHAMBER_PORT=7777
 PASEO_PORT=6767
@@ -140,27 +152,35 @@ version_gte() {
     printf '%s\n%s' "$v2" "$v1" | sort -V -C
 }
 
-# npm install -g wrapper: retries with sudo when the global prefix is not writable
+# Ensure the systemd user bus is reachable (non-login shells often lack
+# XDG_RUNTIME_DIR even though user@UID.service is up).
+ensure_user_bus() {
+    if [[ -z "${XDG_RUNTIME_DIR:-}" && -S "/run/user/$(id -u)/bus" ]]; then
+        export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+    fi
+}
+
+# npm install -g wrapper: the global prefix must be user-owned (nvm version
+# dir via ~/.local/bin shims - see tooling/bin/userspace-shims.sh). This
+# function never escalates to sudo; on failure it explains how to fix the
+# userspace layout instead.
 npm_install_global() {
     local pkg="$1"
     local output exit_code
     local npm_prefix
-    npm_prefix=$(npm config get prefix 2>/dev/null || echo "/usr/local")
+    npm_prefix=$(npm config get prefix 2>/dev/null || echo "")
 
     output=$(npm install -g "$pkg" 2>&1) && { echo "$output"; return 0; }
     exit_code=$?
 
-    # Only escalate to sudo if the global prefix's node_modules is not writable.
-    # This avoids false triggers from "permission denied" text in package
-    # lifecycle scripts (security fix for review finding #2).
-    if [[ ! -w "$npm_prefix/lib/node_modules" ]]; then
-        echo "$output"
-        echo_warn "Need root permissions. Retrying with sudo..."
-        sudo npm install -g "$pkg"
-    else
-        echo "$output"
-        return $exit_code
+    echo "$output"
+    if [[ -n "$npm_prefix" && ! -w "$npm_prefix" ]]; then
+        echo_err "Global npm prefix '$npm_prefix' is not writable and this script will not use sudo."
+        echo_err "Fix the userspace layout, then retry:"
+        echo_err "  ./tooling/bin/userspace-shims.sh   # re-point ~/.local/bin shims at the nvm default node"
+        echo_err "  npm config get prefix               # must resolve to a user-owned dir (nvm version dir)"
     fi
+    return $exit_code
 }
 
 add_check() {
@@ -326,18 +346,19 @@ collect_status() {
         fi
     fi
     
-    # Paseo systemd service
+    # Paseo systemd USER service (userspace - never the system unit)
     if command -v systemctl &>/dev/null; then
+        ensure_user_bus
         local svc_status
-        svc_status=$(systemctl is-active paseo.service 2>/dev/null || echo "inactive")
+        svc_status=$(systemctl --user is-active paseo.service 2>/dev/null || echo "inactive")
         if [[ "$svc_status" == "active" ]]; then
-            add_check "Paseo" "Systemd service" "true" "paseo.service active"
+            add_check "Paseo" "Systemd service" "true" "paseo.service active (user)"
         else
             # Check if it's registered at all
-            if systemctl list-unit-files paseo.service &>/dev/null; then
-                add_check "Paseo" "Systemd service" "false" "paseo.service $svc_status"
+            if systemctl --user list-unit-files paseo.service &>/dev/null; then
+                add_check "Paseo" "Systemd service" "false" "paseo.service $svc_status (user)"
             else
-                add_warn "Paseo" "Systemd service" "paseo.service not registered"
+                add_warn "Paseo" "Systemd service" "paseo.service not registered (user)"
             fi
         fi
     fi
@@ -512,8 +533,9 @@ do_start_app() {
         paseo)
             if ! check_port "$PASEO_PORT"; then
                 echo_info "Starting Paseo daemon..."
-                if command -v systemctl &>/dev/null && systemctl list-unit-files paseo.service &>/dev/null 2>&1; then
-                    sudo systemctl start paseo.service
+                ensure_user_bus
+                if systemctl --user list-unit-files paseo.service &>/dev/null 2>&1; then
+                    systemctl --user start paseo.service
                 else
                     nohup paseo daemon start > /dev/null 2>&1 &
                     sleep 2
@@ -555,8 +577,9 @@ do_stop_app() {
         paseo)
             if check_port "$PASEO_PORT"; then
                 echo_info "Stopping Paseo daemon..."
-                if command -v systemctl &>/dev/null && systemctl list-unit-files paseo.service &>/dev/null 2>&1; then
-                    sudo systemctl stop paseo.service
+                ensure_user_bus
+                if systemctl --user list-unit-files paseo.service &>/dev/null 2>&1; then
+                    systemctl --user stop paseo.service
                 else
                     paseo daemon stop 2>/dev/null || true
                 fi
@@ -609,7 +632,8 @@ do_fix() {
             if [[ "$FORCE" == true ]] || [[ "$QUIET" == true ]]; then
                 sed -i 's/"listen".*/"listen": "0.0.0.0:'"$PASEO_PORT"'",/' "$paseo_cfg"
                 echo_info "Fixed listen address. Restarting Paseo..."
-                sudo systemctl restart paseo.service 2>/dev/null || paseo daemon restart 2>/dev/null || true
+                ensure_user_bus
+                systemctl --user restart paseo.service 2>/dev/null || paseo daemon restart 2>/dev/null || true
             fi
         fi
     fi
@@ -636,7 +660,11 @@ do_startup() {
                 echo_info "OpenChamber: no built-in autostart (use systemd or cron)"
                 ;;
             paseo)
-                local SERVICE_FILE="/etc/systemd/system/paseo.service"
+                # Userspace autostart: systemd USER unit, no sudo required.
+                # One-time sudo prerequisite (survive logout):
+                #   sudo loginctl enable-linger "$(whoami)"
+                ensure_user_bus
+                local SERVICE_FILE="$HOME/.config/systemd/user/paseo.service"
                 local TEMPLATE="$SCRIPT_DIR/paseo.service"
 
                 ensure_env_file_lines() {
@@ -651,7 +679,7 @@ do_startup() {
                         local suffix
                         suffix=$(echo "$line" | sed 's|.*EnvironmentFile=-%h||')
                         if ! grep -q "EnvironmentFile=-.*${suffix}" "$target" 2>/dev/null; then
-                            sudo sed -i "/^ExecStart=/i $line" "$target"
+                            sed -i "/^ExecStart=/i $line" "$target"
                             added=$((added+1))
                         fi
                     done
@@ -660,25 +688,29 @@ do_startup() {
 
                 case "$verb" in
                     install)
+                        if [[ "$(loginctl show-user "$(whoami)" 2>/dev/null | grep -i '^Linger=' || echo 'Linger=unknown')" != "Linger=yes" ]]; then
+                            echo_warn "Lingering is not enabled - the user service will stop at logout."
+                            echo_warn "One-time fix (requires sudo): sudo loginctl enable-linger $(whoami)"
+                        fi
                         if [[ -f "$SERVICE_FILE" ]]; then
                             # Existing service: append EnvironmentFile= lines if missing
                             local env_count
                             env_count=$(grep -c "EnvironmentFile=-.*\.config/heypogi" "$SERVICE_FILE" 2>/dev/null || true)
                             if [[ "$env_count" -lt 3 ]]; then
                                 ensure_env_file_lines "$SERVICE_FILE"
-                                sudo systemctl daemon-reload
-                                echo_success "Paseo systemd service updated with env file references"
+                                systemctl --user daemon-reload
+                                echo_success "Paseo user service updated with env file references"
                             else
-                                echo_success "Paseo systemd service already has env file references"
+                                echo_success "Paseo user service already has env file references"
                             fi
                         elif [[ -f "$TEMPLATE" ]]; then
-                            # New install: render template and write
-                            local rendered
-                            rendered=$(sed -e "s|__USER__|$(whoami)|g" -e "s|__HOME__|$HOME|g" "$TEMPLATE")
-                            echo "$rendered" | sudo tee "$SERVICE_FILE" > /dev/null
-                            sudo systemctl daemon-reload
-                            sudo systemctl enable paseo.service
-                            echo_success "Paseo systemd service installed"
+                            # New install: copy template into the user unit dir
+                            mkdir -p "$(dirname "$SERVICE_FILE")"
+                            cp "$TEMPLATE" "$SERVICE_FILE"
+                            chmod 600 "$SERVICE_FILE"
+                            systemctl --user daemon-reload
+                            systemctl --user enable paseo.service
+                            echo_success "Paseo user service installed (~/.config/systemd/user/paseo.service)"
                         else
                             echo_warn "paseo.service template not found at $TEMPLATE"
                         fi
@@ -689,26 +721,26 @@ do_startup() {
                             env_count=$(grep -c "EnvironmentFile=-.*\.config/heypogi" "$SERVICE_FILE" 2>/dev/null || true)
                             if [[ "$env_count" -lt 3 ]]; then
                                 ensure_env_file_lines "$SERVICE_FILE"
-                                sudo systemctl daemon-reload
-                                echo_success "Paseo systemd service fixed with env file references"
+                                systemctl --user daemon-reload
+                                echo_success "Paseo user service fixed with env file references"
                             else
-                                echo_success "Paseo systemd service already has env file references"
+                                echo_success "Paseo user service already has env file references"
                             fi
                         else
                             echo_warn "paseo.service not found at $SERVICE_FILE"
                         fi
                         ;;
                     enable)
-                        sudo systemctl enable paseo.service 2>/dev/null && echo_success "Enabled paseo.service" || echo_warn "Could not enable paseo.service"
+                        systemctl --user enable paseo.service 2>/dev/null && echo_success "Enabled paseo.service (user)" || echo_warn "Could not enable paseo.service"
                         ;;
                     disable)
-                        sudo systemctl disable paseo.service 2>/dev/null && echo_success "Disabled paseo.service" || echo_warn "Could not disable paseo.service"
+                        systemctl --user disable paseo.service 2>/dev/null && echo_success "Disabled paseo.service (user)" || echo_warn "Could not disable paseo.service"
                         ;;
                     uninstall)
-                        sudo systemctl disable paseo.service 2>/dev/null || true
-                        sudo rm -f /etc/systemd/system/paseo.service
-                        sudo systemctl daemon-reload
-                        echo_success "Paseo systemd service removed"
+                        systemctl --user disable paseo.service 2>/dev/null || true
+                        rm -f "$HOME/.config/systemd/user/paseo.service"
+                        systemctl --user daemon-reload
+                        echo_success "Paseo user service removed"
                         ;;
                 esac
                 ;;
