@@ -229,7 +229,7 @@ do_install() {
     # --- Render .env-common from template (generated + script-owned) ---
     log_info "Rendering .env-common from template..."
     local tmp_common
-    tmp_common="$(mktemp)"
+    tmp_common="$(mktemp "$CONFIG_DIR/.env-common.tmp.XXXXXX")"
     trap 'rm -f "$tmp_common"' EXIT
     render_common_to "$tmp_common"
 
@@ -287,7 +287,7 @@ do_install() {
             log_info ".bashrc: source block unchanged, skipping"
         else
             saved="$(stat -c %a "$BASHRC")"
-            tmp_bashrc="$(mktemp)"
+            tmp_bashrc="$(mktemp "$HOME/.bashrc.tmp.XXXXXX")"
             awk -v start="$MARKER_START" -v end="$MARKER_END" -v block="$SOURCE_BLOCK" '
                 $0 == start { print block; skip=1; next }
                 skip && $0 == end { skip=0; next }

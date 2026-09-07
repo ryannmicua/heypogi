@@ -212,8 +212,14 @@ do_install() {
     else
         log_info "tooling/bin/dev-stack entry point already correct; skipping."
     fi
-    log_info "Repointing ~/.local/node-bin via symlink-nvm-node-bin.sh ..."
-    if ! bash "$SYMLINK_SCRIPT"; then
+    log_info "Repointing $HOME/.local/node-bin via symlink-nvm-node-bin.sh ..."
+    if [[ "$QUIET" == true ]]; then
+        bash "$SYMLINK_SCRIPT" >/dev/null || {
+            log_err "symlink-nvm-node-bin.sh failed (no nvm default Node?)."
+            log_err "Remediation: nvm install --lts && nvm alias default <version>, then re-run."
+            return 3
+        }
+    elif ! bash "$SYMLINK_SCRIPT"; then
         log_err "symlink-nvm-node-bin.sh failed (no nvm default Node?)."
         log_err "Remediation: nvm install --lts && nvm alias default <version>, then re-run."
         return 3

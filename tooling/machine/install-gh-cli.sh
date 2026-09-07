@@ -151,7 +151,17 @@ do_install() {
     want="$(expected_repo_line)"
     if [[ ! -f "$REPO_LIST" ]] || ! grep -Fxq "$want" "$REPO_LIST" 2>/dev/null || [[ "$FORCE" == true ]]; then
         log_info "Writing $REPO_LIST ..."
-        printf '%s\n' "$want" | run_priv tee "$REPO_LIST" >/dev/null
+        if [[ "$DRY_RUN" == true ]]; then
+            log_dry "sudo install -m 644 <rendered repo line> $REPO_LIST (compare-before-write, atomic)"
+        else
+            local tmp_list
+            tmp_list="$(mktemp)"
+            trap 'rm -f "$tmp_list"' EXIT
+            printf '%s\n' "$want" >"$tmp_list"
+            run_priv install -m 644 "$tmp_list" "$REPO_LIST"
+            rm -f "$tmp_list"
+            trap - EXIT
+        fi
     else
         log_info "apt repo already configured; skipping."
     fi

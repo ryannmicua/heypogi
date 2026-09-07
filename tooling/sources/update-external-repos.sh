@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 #=======================================================================
 # Script:    update-external-repos.sh
+# Classification: orchestrator (verb-free per KTD2: sequences leaves,
+#            owns ordering + aggregate result, takes -f/-q/--dry-run).
 # Purpose:   Converge all external/ checkouts by delegating to the
 #            clone-*.sh scripts, then propagate the aggregate result.
 #            Repo root is derived from this script's position (never

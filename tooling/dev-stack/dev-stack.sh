@@ -90,14 +90,6 @@ echo_err() {
 }
 dry_echo() { printf 'DRY-RUN: %s\n' "$*"; }
 
-run() {
-    if [[ "$DRY_RUN" == true ]]; then
-        dry_echo "$*"
-        return 0
-    fi
-    "$@"
-}
-
 get_version() {
     local cmd="$1"
     if command -v "$cmd" &>/dev/null; then
@@ -603,9 +595,11 @@ ensure_paseo_env_allowlist() {
 
 paseo_effective_listen() {
     # Prints the effective daemon listen address (live config, else
-    # the intended default). Never prints secrets.
+    # the intended default). Never prints secrets. Fail-closed: any
+    # read/parse failure defaults to the remote bind, never to empty
+    # (an unreadable config must not silently open the daemon).
     if [[ -f "$PASEO_LIVE_CONFIG" ]]; then
-        python3 -c "import json; print(json.load(open('$PASEO_LIVE_CONFIG')).get('daemon',{}).get('listen',''))" 2>/dev/null || echo ''
+        python3 -c "import json; print(json.load(open('$PASEO_LIVE_CONFIG')).get('daemon',{}).get('listen',''))" 2>/dev/null || echo '0.0.0.0:6767'
     else
         echo '0.0.0.0:6767'
     fi
@@ -625,6 +619,20 @@ paseo_password_set() {
 require_paseo_password_for_remote() {
     # Fail-closed (R28): a 0.0.0.0 bind without PASEO_PASSWORD refuses
     # with exit 3. No open remote daemon, ever.
+    # $1 = "unit" when the managed systemd unit is involved: the unit
+    # template hardcodes `--listen 0.0.0.0:6767`, so the password is
+    # required unconditionally there (the config-file listen value is
+    # not the bind surface for unit paths). Otherwise the effective
+    # config listen decides.
+    local mode="${1:-config}"
+    if [[ "$mode" == "unit" ]]; then
+        if ! paseo_password_set; then
+            echo_err "Refusing to install/enable/start the Paseo unit without PASEO_PASSWORD (fail-closed: the unit binds 0.0.0.0)."
+            echo_err "Remediation: set PASEO_PASSWORD in ~/.config/heypogi/.env-secrets, run 'dev-stack.sh install -a paseo', then retry."
+            return 3
+        fi
+        return 0
+    fi
     local listen
     listen="$(paseo_effective_listen)"
     case "$listen" in
@@ -895,6 +903,7 @@ do_start_app() {
                         echo_warn "  export OPENCHAMBER_UI_PASSWORD=\"yourpassword\""
                         echo_warn "  echo 'export OPENCHAMBER_UI_PASSWORD=\"yourpassword\"' >> ~/.bashrc"
                     fi
+                    return 1
                 fi
             else
                 echo_success "OpenChamber already running"
@@ -905,12 +914,16 @@ do_start_app() {
                 dry_echo "start paseo.service (user unit) or 'paseo daemon start' fallback"
                 return 0
             fi
-            require_paseo_password_for_remote || return $?
+            ensure_user_bus
+            if systemctl --user list-unit-files paseo.service &>/dev/null 2>&1; then
+                require_paseo_password_for_remote unit || return $?
+            else
+                require_paseo_password_for_remote config || return $?
+            fi
             if ! check_port "$PASEO_PORT"; then
                 echo_info "Starting Paseo daemon..."
-                ensure_user_bus
                 if systemctl --user list-unit-files paseo.service &>/dev/null 2>&1; then
-                    systemctl --user start paseo.service
+                    systemctl --user start paseo.service || true
                 else
                     nohup paseo daemon start > /dev/null 2>&1 &
                     sleep 2
@@ -919,6 +932,7 @@ do_start_app() {
                     echo_success "Paseo daemon started"
                 else
                     echo_warn "Paseo daemon may have failed to start"
+                    return 1
                 fi
             else
                 echo_success "Paseo daemon already running"
@@ -962,7 +976,7 @@ do_stop_app() {
                 echo_info "Stopping Paseo daemon..."
                 ensure_user_bus
                 if systemctl --user list-unit-files paseo.service &>/dev/null 2>&1; then
-                    systemctl --user stop paseo.service
+                    systemctl --user stop paseo.service 2>/dev/null || true
                 else
                     paseo daemon stop 2>/dev/null || true
                 fi
@@ -1021,19 +1035,23 @@ do_fix() {
     local apps
     apps=$(resolve_app_list "$APP")
 
+    local fix_rc=0
     if [[ "$apps" == *"openchamber"* ]] || [[ "$apps" == *"all"* ]]; then
         if ! check_port "$OPENCHAMBER_PORT"; then
-            do_start_app "openchamber"
+            do_start_app "openchamber" || fix_rc=$?
         fi
     fi
-
     if [[ "$apps" == *"paseo"* ]] || [[ "$apps" == *"all"* ]]; then
         if ! check_port "$PASEO_PORT"; then
-            do_start_app "paseo"
+            do_start_app "paseo" || fix_rc=$?
         fi
         # Reconcile Paseo config additively (password-preserving) instead
         # of sed-rewriting the live file.
-        seed_paseo_config || true
+        seed_paseo_config || fix_rc=$?
+    fi
+    if [[ "$fix_rc" -ne 0 ]]; then
+        echo_err "Fix converged with failures (see above)."
+        return "$fix_rc"
     fi
 
     # Verify (informational; fix failures above already returned).
@@ -1101,7 +1119,7 @@ do_startup() {
 
                 case "$verb" in
                     install)
-                        require_paseo_password_for_remote || { startup_rc=$?; continue; }
+                        require_paseo_password_for_remote unit || { startup_rc=$?; continue; }
                         migrate_legacy_system_unit || { startup_rc=$?; continue; }
                         ensure_linger || { startup_rc=$?; continue; }
                         # R32: provision the userspace PATH layout before
@@ -1182,6 +1200,7 @@ do_startup() {
                         fi
                         ;;
                     enable)
+                        require_paseo_password_for_remote unit || { startup_rc=$?; continue; }
                         if [[ "$DRY_RUN" == true ]]; then
                             dry_echo "systemctl --user enable paseo.service"
                         elif systemctl --user enable paseo.service 2>/dev/null; then
@@ -1406,9 +1425,11 @@ case "$COMMAND" in
         ;;
     start)
         apps=$(resolve_app_list "$APP")
+        start_rc=0
         for app in $apps; do
-            do_start_app "$app"
+            do_start_app "$app" || start_rc=$?
         done
+        exit "$start_rc"
         ;;
     stop)
         apps=$(resolve_app_list "$APP")

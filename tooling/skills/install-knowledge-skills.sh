@@ -93,6 +93,12 @@ dest_path="${dest_dir}/compound-knowledge"
 
 resolve() { cd "$1" 2>/dev/null && pwd -P || printf '%s' "$1"; }
 
+# Preview first: show the plan even when sources are absent, then
+# still fail fast below (R26: absent sources are never a silent pass).
+if [[ "$DRY_RUN" == true && ! -d "${skills_root}" ]]; then
+  log_dry "ensure ${dest_dir}/ exists (only with --create-dest)"
+  log_dry "converge symlink (conflicting dirs never removed)"
+fi
 # Source checkout must exist (R26): bootstrap acquires external/
 # checkouts before skills; a direct call with absent sources fails
 # loudly, never silently.

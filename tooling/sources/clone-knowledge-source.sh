@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 #=======================================================================
 # Script:    clone-knowledge-source.sh
+# Classification: action/helper (verb-free per KTD2: reconcilers own
+#            status/install; helpers take -f/-q/--dry-run directly).
 # Purpose:   Ensure the Compound Knowledge source checkout exists at external/compound-knowledge/
 #            (clone on first run, pull latest only with -f/--force or
 #            interactive approval). Called before the CE/knowledge skill
@@ -135,7 +137,11 @@ else
 fi
 
 if [[ "${did_update}" -eq 1 ]]; then
-  bash "${status_recorder}" --name compound-knowledge --repository-path "${target_dir}"
+  if [[ "$QUIET" == true ]]; then
+    bash "${status_recorder}" --name compound-knowledge --repository-path "${target_dir}" -q
+  else
+    bash "${status_recorder}" --name compound-knowledge --repository-path "${target_dir}"
+  fi
 fi
 
 if [[ "$QUIET" != true ]]; then

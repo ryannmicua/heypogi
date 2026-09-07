@@ -71,6 +71,10 @@ if ! printf '%s' "${name}" | grep -Eq '^[A-Za-z0-9._-]+$'; then
   exit 2
 fi
 
+if [[ "$DRY_RUN" == true ]]; then
+  log_dry "collect branch/commit/remote for ${name} from ${repository_path} and reconcile external/.repo-update-status.json (atomic, no write in preview)"
+fi
+
 if [[ ! -d "${repository_path}/.git" ]]; then
   log_err "Could not collect update status for ${name}: not a git repository: ${repository_path}"
   exit 1
@@ -159,7 +163,7 @@ fi
 new_record="${name}"$'\t'"${updated_at}"$'\t'"${branch}"$'\t'"${commit}"$'\t'"${remote}"
 
 if [[ "$DRY_RUN" == true ]]; then
-  log_dry "record ${name}: branch=${branch} commit=${commit} remote=${remote} -> ${status_path}"
+  log_dry "record ${name}: branch=${branch} commit=${commit} (no write in preview)"
   exit 0
 fi
 

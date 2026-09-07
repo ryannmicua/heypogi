@@ -271,9 +271,23 @@ do_status() {
     }
     check_downstream "$HEYPOGI_ROOT/tooling/env/setup-env.sh" status -q
     check_downstream "$HEYPOGI_ROOT/tooling/machine/check-prereqs.sh" status -q
+    check_downstream "$HEYPOGI_ROOT/tooling/bin/userspace-shims.sh" status -q
     check_downstream "$HEYPOGI_ROOT/tooling/machine/install-claude-cli.sh" status -q
     check_downstream "$HEYPOGI_ROOT/tooling/machine/install-codex-cli.sh" status -q
     check_downstream "$HEYPOGI_ROOT/tooling/machine/install-gh-cli.sh" status -q
+    check_downstream "$HEYPOGI_ROOT/tooling/skills/install-skills.sh" status -q
+    check_downstream "$HEYPOGI_ROOT/tooling/skills/install-ce-skills.sh" status -q
+    check_downstream "$HEYPOGI_ROOT/tooling/skills/install-knowledge-skills.sh" status -q
+    # External sources: presence check (the acquire step itself is
+    # update-external-repos.sh -f, which converges rather than reports).
+    for src in compound-engineering compound-knowledge opencode; do
+        if [[ -d "$HEYPOGI_ROOT/external/$src/.git" ]]; then
+            log_info "External source present: $src"
+        else
+            log_warn "External source missing: $src"
+            if [[ "$worst" -ne 3 ]]; then worst=1; fi
+        fi
+    done
     check_downstream "$HEYPOGI_ROOT/tooling/dev-stack/dev-stack.sh" status -q
     if [[ "$worst" -eq 0 ]]; then
         log_ok "Downstream converged."

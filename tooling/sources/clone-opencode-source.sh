@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 #=======================================================================
 # Script:    clone-opencode-source.sh
+# Classification: action/helper (verb-free per KTD2: reconcilers own
+#            status/install; helpers take -f/-q/--dry-run directly).
 # Purpose:   Ensure the OpenCode source checkout exists at external/opencode/
 #            (clone on first run, pull latest only with -f/--force or
 #            interactive approval). Called before the CE/knowledge skill
@@ -135,7 +137,11 @@ else
 fi
 
 if [[ "${did_update}" -eq 1 ]]; then
-  bash "${status_recorder}" --name opencode --repository-path "${target_dir}"
+  if [[ "$QUIET" == true ]]; then
+    bash "${status_recorder}" --name opencode --repository-path "${target_dir}" -q
+  else
+    bash "${status_recorder}" --name opencode --repository-path "${target_dir}"
+  fi
 fi
 
 if [[ "$QUIET" != true ]]; then

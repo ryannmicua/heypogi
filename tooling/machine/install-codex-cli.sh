@@ -232,10 +232,21 @@ install_codex() {
     return 0
   fi
   log_info "Running the official OpenAI Codex installer (as target user, no sudo)."
+  local rc=0
   if command -v timeout >/dev/null 2>&1; then
-    timeout 180 bash -c 'curl -fsSL --connect-timeout 15 --max-time 120 https://chatgpt.com/codex/install.sh | sh'
+    timeout 180 bash -c 'curl -fsSL --connect-timeout 15 --max-time 120 https://chatgpt.com/codex/install.sh | sh' || rc=$?
   else
-    bash -c 'curl -fsSL --connect-timeout 15 --max-time 120 https://chatgpt.com/codex/install.sh | sh'
+    bash -c 'curl -fsSL --connect-timeout 15 --max-time 120 https://chatgpt.com/codex/install.sh | sh' || rc=$?
+  fi
+  if [[ "$rc" -ne 0 ]]; then
+    # Normalize vendor/timeout exits to the contract map: unreachable
+    # installer is blocked (3), anything else is failed/incomplete (1).
+    if ! curl -fsSL --connect-timeout 10 --max-time 20 -o /dev/null https://chatgpt.com/codex/install.sh 2>/dev/null; then
+      log_err "Codex installer unreachable (offline?)."
+      return 3
+    fi
+    log_err "Codex installer exited $rc."
+    return 1
   fi
   hash -r 2>/dev/null || true
 }

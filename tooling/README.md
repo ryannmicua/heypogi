@@ -20,9 +20,12 @@ markers, and `status` aggregation. All install logic lives here, in
 | `bin/` | `userspace-shims.sh` (+ PATH entry points) | `~/.local/bin`, `~/.local/node-bin`, npm prefix, CLI shims the rootless unit needs |
 | `dev-stack/` | `dev-stack.sh` (+ `paseo.service` user-unit template) | Paseo config seed (additive, password-preserving merge), rootless user unit, legacy system-unit migration, linger ownership, fail-closed bind, `~/.config/heypogi/.env-paseo` secrets allowlist |
 
-Every bootstrap-callable script supports `status` (default, read-only) /
+Every bootstrap-callable reconciler supports `status` (default, read-only) /
 `install` with `-f`/`-q`/`--dry-run` and exits 0 converged, 1 drift/failed,
-2 usage error, 3 blocked. `--dry-run` writes nothing (no marker, logs,
+2 usage error, 3 blocked. (Action/helpers and orchestrators such as
+`clone-*.sh`, `record-external-repo-update.sh`, and
+`update-external-repos.sh` stay verb-free per KTD2 and take
+`-f`/`-q`/`--dry-run` directly.) `--dry-run` writes nothing (no marker, logs,
 or child mutations). Paseo binds `0.0.0.0` only with `PASEO_PASSWORD` set.
 
 ## Windows setup (dev-stack.ps1)
@@ -85,7 +88,7 @@ One entry point for the whole stack. Full reference:
 | Command | Role |
 |---------|------|
 | `install` (alias `update`) | Explicit setup: install/update the three tools, restart daemons, ensure autostart + config, then verify. Idempotent. |
-| `status` (default) | Read-only check of the intended state. Exit 0 = all good, 1 = issues, 2 = cannot verify (npm offline). |
+| `status` (default) | Read-only check of the intended state. Exit 0 = all good, 1 = issues, 2 = cannot verify (npm offline). (Linux `dev-stack.sh`: 0 converged, 1 drift, 3 indeterminate/blocked incl. offline registry.) |
 | `fix` | Repair stopped daemons, autostart registrations, and `0.0.0.0`/web UI config. |
 | `start` / `stop` | Control both daemons. Accepts `-App <tool>` to target just one. |
 | `startup <verb>` | Manage autostart-at-login registration only (package stays installed). |
@@ -105,7 +108,8 @@ Every check it performs, plus autostart/health details:
 |------|-----------|-----------------|
 | `~/.config/github-app/app.conf` | Repo template `tooling/machine/github-app.app.conf.template` via `tooling/machine/github-app-identity.sh` | `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, named `<installation>=<id>` entries (first = git default) — see [`machine/github-app-identity.md`](machine/github-app-identity.md) |
 | `~/.config/openchamber/settings.json` | Repo template `tooling/dev-stack/openchamber.settings.json` via `openchamber-ctl.ps1 configure` (or the OpenChamber app itself) | `port: 7777`, `host: 0.0.0.0`, `autoStart: true` (defaults applied by the script when keys are absent) |
-| `~/.paseo/config.json` | Paseo itself on first load (default is localhost-only) | `daemon.listen: "0.0.0.0:6767"`, `features.webUi.enabled: true`, `daemon.auth.password` (bcrypt) |
+| `~/.paseo/config.json` (Windows) | Paseo itself on first load (default is localhost-only) | `daemon.listen: "0.0.0.0:6767"`, `features.webUi.enabled: true`, `daemon.auth.password` (bcrypt) |
+| `~/.paseo/config.json` (Linux) | `dev-stack.sh install -a paseo` additive seed/merge from `dotfiles/paseo/config.json` | `daemon.listen: "0.0.0.0:6767"`, `daemon.auth.password` (bcrypt, preserved never overwritten); live 0.4.0+ has no `features.webUi` key - web UI is the unit's `--web-ui` launcher flag, verified from the running process |
 | `%APPDATA%\Paseo\desktop-settings.json` | Paseo desktop app | `settings.daemon.manageBuiltInDaemon: false` — **advisory only**, never modified by the scripts |
 | `~/.config/openchamber/startup.ps1` + `launch.vbs` | `openchamber-ctl.ps1 configure` | Launch the OpenChamber server hidden at login (wrappers used by the Run key) |
 

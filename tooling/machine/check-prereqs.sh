@@ -215,11 +215,21 @@ install_uv() {
         return 3
     fi
     log_info "Installing uv via official installer (timeout 120)..."
+    local rc=0
     if command -v timeout >/dev/null 2>&1; then
-        timeout 120 bash -c 'curl -fLsS https://astral.sh/uv/install.sh | sh'
+        timeout 120 bash -c 'curl -fLsS https://astral.sh/uv/install.sh | sh' || rc=$?
     else
-        bash -c 'curl -fLsS https://astral.sh/uv/install.sh | sh'
+        bash -c 'curl -fLsS https://astral.sh/uv/install.sh | sh' || rc=$?
     fi
+    if [[ "$rc" -ne 0 ]]; then
+        if ! curl -fLsSI --connect-timeout 10 --max-time 15 -o /dev/null https://astral.sh/uv/install.sh 2>/dev/null; then
+            log_err "uv installer unreachable (offline?)."
+            return 3
+        fi
+        log_err "uv installer exited $rc."
+        return 1
+    fi
+    return 0
 }
 
 do_status() {
@@ -285,7 +295,7 @@ do_install() {
         [[ "$rc" -ne 0 ]] && return 1
     fi
     if ! command -v uv >/dev/null 2>&1 || [[ "$FORCE" == true ]]; then
-        install_uv || return 1
+        install_uv || return $?
     fi
     if [[ "$DRY_RUN" == true ]]; then
         log_dry "Verify-only in dry-run; no writes performed."
