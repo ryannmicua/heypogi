@@ -139,13 +139,21 @@ test_health() {
 
 get_latest_version() {
     local package="$1"
-    npm view "$package" version 2>/dev/null | tail -1 || echo ""
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 30 npm view "$package" version 2>/dev/null | tail -1 || echo ""
+    else
+        npm view "$package" version 2>/dev/null | tail -1 || echo ""
+    fi
 }
 
 get_dist_tag_version() {
     local package="$1"
     local tag="$2"
-    npm view "$package" "dist-tags.$tag" 2>/dev/null | tail -1 || echo ""
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 30 npm view "$package" "dist-tags.$tag" 2>/dev/null | tail -1 || echo ""
+    else
+        npm view "$package" "dist-tags.$tag" 2>/dev/null | tail -1 || echo ""
+    fi
 }
 
 # Finite registry-reachability probe. Offline registry lookups are
@@ -530,6 +538,7 @@ with open(out_path, "w") as f:
     json.dump(merged, f, indent=2)
     f.write("\n")
 PYEOF
+        rm -f "$tmp"
         trap - EXIT
         echo_err "Paseo config merge failed (unparseable live config?)."
         echo_err "Remediation: validate $PASEO_LIVE_CONFIG as JSON, back it up, then re-run."
@@ -616,6 +625,18 @@ paseo_password_set() {
     return 1
 }
 
+paseo_password_in_unit_env() {
+    # R28: systemd user units load PASEO_PASSWORD only from the
+    # EnvironmentFile (the .env-paseo allowlist file). The caller's
+    # bash environment is irrelevant because systemd discards it.
+    # This function checks only the file-based surface that the unit
+    # actually loads.
+    if [[ -f "$PASEO_ENV_FILE" ]] && grep -qE '^PASEO_PASSWORD=.+' "$PASEO_ENV_FILE" 2>/dev/null; then
+        return 0
+    fi
+    return 1
+}
+
 require_paseo_password_for_remote() {
     # Fail-closed (R28): a 0.0.0.0 bind without PASEO_PASSWORD refuses
     # with exit 3. No open remote daemon, ever.
@@ -626,8 +647,8 @@ require_paseo_password_for_remote() {
     # config listen decides.
     local mode="${1:-config}"
     if [[ "$mode" == "unit" ]]; then
-        if ! paseo_password_set; then
-            echo_err "Refusing to install/enable/start the Paseo unit without PASEO_PASSWORD (fail-closed: the unit binds 0.0.0.0)."
+        if ! paseo_password_in_unit_env; then
+            echo_err "Refusing to install/enable/start the Paseo unit without PASEO_PASSWORD in .env-paseo (fail-closed: the unit binds 0.0.0.0)."
             echo_err "Remediation: set PASEO_PASSWORD in ~/.config/heypogi/.env-secrets, run 'dev-stack.sh install -a paseo', then retry."
             return 3
         fi
@@ -959,7 +980,7 @@ do_stop_app() {
                 pid=$(get_listening_pid "$OPENCHAMBER_PORT")
                 if [[ -n "$pid" ]]; then
                     echo_info "Stopping OpenChamber (pid $pid)..."
-                    kill "$pid" 2>/dev/null || true
+                    kill "$pid" 2>/dev/null
                     sleep 1
                     echo_success "OpenChamber stopped"
                 fi
@@ -976,9 +997,9 @@ do_stop_app() {
                 echo_info "Stopping Paseo daemon..."
                 ensure_user_bus
                 if systemctl --user list-unit-files paseo.service &>/dev/null 2>&1; then
-                    systemctl --user stop paseo.service 2>/dev/null || true
+                    systemctl --user stop paseo.service 2>/dev/null
                 else
-                    paseo daemon stop 2>/dev/null || true
+                    paseo daemon stop 2>/dev/null
                 fi
                 echo_success "Paseo daemon stopped"
             else
@@ -1065,34 +1086,75 @@ do_fix() {
 startup_ensure_allowlist_lines() {
     # Reconcile the unit's EnvironmentFile allowlist (R28): common +
     # override + generated .env-paseo. Removes any legacy line loading
-    # the whole .env-secrets file. Compare-before-write (no-op when
-    # converged). Returns 0 when converged, 1 when changed.
+    # the whole .env-secrets file. Atomic: reads, merges in memory,
+    # writes to mktemp, cmp before mv (no check-then-sed race).
+    # Returns 0 when converged, 1 when changed.
     local target="$1"
     local changed=0
-    local line
+
+    if [[ "$DRY_RUN" == true ]]; then
+        local need_add=0 need_rm=0
+        for line in "EnvironmentFile=-%h/.config/heypogi/.env-common" \
+                    "EnvironmentFile=-%h/.config/heypogi/.env-override" \
+                    "EnvironmentFile=-%h/.config/heypogi/.env-paseo"; do
+            grep -qF "$line" "$target" 2>/dev/null || need_add=1
+        done
+        grep -qF "EnvironmentFile=-%h/.config/heypogi/.env-secrets" "$target" 2>/dev/null && need_rm=1
+        if [[ "$need_add" -eq 1 || "$need_rm" -eq 1 ]]; then
+            dry_echo "reconcile EnvironmentFile allowlist in $target (atomic rewrite)"
+        fi
+        return 0
+    fi
+
+    local tmp_target
+    tmp_target="$(mktemp "${target}.tmp.XXXXXX")"
+    trap 'rm -f "$tmp_target"' EXIT
+
+    # Build the desired unit file content: keep all lines except the
+    # legacy whole-secrets line, and ensure the three allowlist lines
+    # are present before ExecStart=.
+    local allowlist_inserted=0
+    while IFS= read -r src_line || [[ -n "$src_line" ]]; do
+        # Skip legacy whole-secrets line
+        if [[ "$src_line" =~ ^EnvironmentFile=-.*\.config/heypogi/\.env-secrets$ ]]; then
+            changed=1
+            continue
+        fi
+        # Insert allowlist lines before the first ExecStart=
+        if [[ "$allowlist_inserted" -eq 0 && "$src_line" =~ ^ExecStart= ]]; then
+            printf '%s\n' "EnvironmentFile=-%h/.config/heypogi/.env-common" >>"$tmp_target"
+            printf '%s\n' "EnvironmentFile=-%h/.config/heypogi/.env-override" >>"$tmp_target"
+            printf '%s\n' "EnvironmentFile=-%h/.config/heypogi/.env-paseo" >>"$tmp_target"
+            allowlist_inserted=1
+        fi
+        printf '%s\n' "$src_line" >>"$tmp_target"
+    done <"$target"
+
+    # Handle edge case: no ExecStart= found, append at end
+    if [[ "$allowlist_inserted" -eq 0 ]]; then
+        printf '%s\n' "EnvironmentFile=-%h/.config/heypogi/.env-common" >>"$tmp_target"
+        printf '%s\n' "EnvironmentFile=-%h/.config/heypogi/.env-override" >>"$tmp_target"
+        printf '%s\n' "EnvironmentFile=-%h/.config/heypogi/.env-paseo" >>"$tmp_target"
+        allowlist_inserted=1
+    fi
+
+    # Check if any allowlist line was missing (even if we didn't skip
+    # the secrets line, the content may have changed)
     for line in "EnvironmentFile=-%h/.config/heypogi/.env-common" \
                 "EnvironmentFile=-%h/.config/heypogi/.env-override" \
                 "EnvironmentFile=-%h/.config/heypogi/.env-paseo"; do
-        if ! grep -qF "$line" "$target" 2>/dev/null; then
-            if [[ "$DRY_RUN" == true ]]; then
-                dry_echo "add '$line' to $target"
-            else
-                sed -i "/^ExecStart=/i $line" "$target"
-            fi
-            changed=1
-        fi
+        grep -qF "$line" "$tmp_target" 2>/dev/null || changed=1
     done
-    # Drop the legacy whole-secrets line (R28: never load unrelated
-    # credentials into the daemon environment).
-    if grep -qF "EnvironmentFile=-%h/.config/heypogi/.env-secrets" "$target" 2>/dev/null; then
-        if [[ "$DRY_RUN" == true ]]; then
-            dry_echo "remove whole-secrets EnvironmentFile line from $target"
-        else
-            sed -i '/^EnvironmentFile=-.*\.config\/heypogi\/\.env-secrets$/d' "$target"
-        fi
-        changed=1
+
+    if [[ "$changed" -eq 0 ]]; then
+        rm -f "$tmp_target"
+        trap - EXIT
+        return 0
     fi
-    return "$changed"
+
+    mv "$tmp_target" "$target"
+    trap - EXIT
+    return 1
 }
 
 do_startup() {
@@ -1433,9 +1495,11 @@ case "$COMMAND" in
         ;;
     stop)
         apps=$(resolve_app_list "$APP")
+        stop_rc=0
         for app in $apps; do
-            do_stop_app "$app"
+            do_stop_app "$app" || stop_rc=$?
         done
+        exit "$stop_rc"
         ;;
     restart)
         if [[ "$DRY_RUN" == true ]]; then
@@ -1443,13 +1507,15 @@ case "$COMMAND" in
             exit 0
         fi
         apps=$(resolve_app_list "$APP")
+        restart_rc=0
         for app in $apps; do
-            do_stop_app "$app"
+            do_stop_app "$app" || restart_rc=$?
         done
         sleep 2
         for app in $apps; do
-            do_start_app "$app"
+            do_start_app "$app" || restart_rc=$?
         done
+        exit "$restart_rc"
         ;;
     startup)
         do_startup "$STARTUP_VERB"

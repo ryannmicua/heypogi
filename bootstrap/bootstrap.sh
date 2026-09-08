@@ -151,8 +151,27 @@ if [[ "$EUID" -eq 0 && "$TARGET_USER" == "root" && "$TARGET_USER_EXPLICIT" != tr
     log_err "Remediation: re-run with --user TARGET (leaf installers are never run wholesale as root)."
     exit 2
 fi
+# R21/KTD6: refuse UID 0 (root) without explicit --user to prevent
+# --user 0 bypassing the literal-string root check above.
+if [[ "$TARGET_UID" -eq 0 && "$TARGET_USER_EXPLICIT" != true ]]; then
+    log_err "Target user resolves to UID 0 (root) without --user flag. Root-owned leaves are not allowed."
+    log_err "Remediation: re-run with --user TARGET (leaf installers are never run wholesale as root)."
+    exit 2
+fi
+# R21: --user root is always rejected when running as root, because
+# leaf installers are never run wholesale as root (plan R21/KTD6).
+if [[ "$EUID" -eq 0 && "$TARGET_USER" == "root" ]]; then
+    log_err "--user root is not supported. Leaf installers are never run wholesale as root."
+    log_err "Remediation: run without --user to use the current user, or omit --user and run as the target user directly."
+    exit 2
+fi
 TARGET_UID="$(id -u "$TARGET_USER")"
-TARGET_HOME="$(eval echo "~$TARGET_USER")"
+TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
+if [[ -z "$TARGET_HOME" ]]; then
+    log_err "Could not resolve home directory for '$TARGET_USER' (getent passwd failed)."
+    log_err "Remediation: verify '$TARGET_USER' exists and has a valid passwd entry."
+    exit 2
+fi
 TARGET_XDG="/run/user/$TARGET_UID"
 TARGET_PATH="$TARGET_HOME/.local/bin:$TARGET_HOME/.local/node-bin:$TARGET_HOME/.opencode/bin:$HEYPOGI_ROOT/tooling/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
 MARKER_DIR="$TARGET_HOME/.config/heypogi"
@@ -176,6 +195,10 @@ fi
 # Run a command in the target context (R21): user bus + userspace-first
 # PATH for TARGET; sudo -u down-switch only when privileged.
 as_target() {
+    if [[ "$DRY_RUN" == true ]]; then
+        dry_echo "(as $TARGET_USER) $*"
+        return 0
+    fi
     if [[ "$NEED_SWITCH" == true ]]; then
         sudo -u "$TARGET_USER" env "HOME=$TARGET_HOME" "XDG_RUNTIME_DIR=$TARGET_XDG" "PATH=$TARGET_PATH" "$@"
     else
@@ -202,7 +225,7 @@ finalize_marker() {
                 line="$1"; log_f="$2"; last_f="$3"; lock_f="$4"; dir_f="$5"
                 mkdir -p "$dir_f" 2>/dev/null || exit 1
                 exec 9>"$lock_f" 2>/dev/null || exit 1
-                if command -v flock >/dev/null 2>&1; then flock -x 9 || exit 1; fi
+                flock -x 9 || exit 1
                 printf "%s\n" "$line" >>"$log_f" || exit 1
                 tmp="$last_f.tmp.$$"
                 printf "%s\n" "$line" >"$tmp" || exit 1
@@ -217,7 +240,7 @@ finalize_marker() {
         fi
         (
             exec 9>"$MARKER_LOCK" 2>/dev/null || exit 1
-            if command -v flock >/dev/null 2>&1; then flock -x 9 || exit 1; fi
+            flock -x 9 || exit 1
             printf '%s\n' "$line" >>"$MARKER_LOG" || exit 1
             tmp="$MARKER_LAST.tmp.$$"
             printf '%s\n' "$line" >"$tmp" || exit 1
@@ -265,7 +288,8 @@ do_status() {
     check_downstream() {
         as_target "$@" || rc=$?
         if [[ "$rc" -eq 3 ]]; then worst=3
-        elif [[ "$rc" -ne 0 && "$worst" -ne 3 ]]; then worst=1
+        elif [[ "$rc" -eq 2 && "$worst" -ne 3 ]]; then worst=2
+        elif [[ "$rc" -ne 0 && "$worst" -ne 3 && "$worst" -ne 2 ]]; then worst=1
         fi
         rc=0
     }
@@ -293,6 +317,8 @@ do_status() {
         log_ok "Downstream converged."
     elif [[ "$worst" -eq 3 ]]; then
         log_err "Downstream indeterminate/blocked."
+    elif [[ "$worst" -eq 2 ]]; then
+        log_err "Downstream usage error (bad invocation in a child)."
     else
         log_warn "Downstream drift detected."
     fi

@@ -112,11 +112,17 @@ MARKER_START="# >>> heypogi env >>>"
 MARKER_END="# <<< heypogi <<<"
 
 SOURCE_BLOCK="$MARKER_START
-set -a
-. \"\$HOME/.config/heypogi/.env-common\"
-. \"\$HOME/.config/heypogi/.env-override\"
-. \"\$HOME/.config/heypogi/.env-secrets\"
-set +a
+# Guard shim: validates grammar + permissions before sourcing env files.
+# Defense-in-depth (R30): catches drift between reconciler guard runs.
+if [[ -f \"\$HOME/.config/heypogi/.env-guard.sh\" ]]; then
+  source \"\$HOME/.config/heypogi/.env-guard.sh\"
+else
+  set -a
+  . \"\$HOME/.config/heypogi/.env-common\"
+  . \"\$HOME/.config/heypogi/.env-override\"
+  . \"\$HOME/.config/heypogi/.env-secrets\"
+  set +a
+fi
 $MARKER_END"
 
 render_common_to() {
@@ -269,6 +275,46 @@ do_install() {
         log_info ".env-secrets: exists, skipping"
     fi
     chmod 600 "$ENV_SECRETS"
+
+    # --- Generate hardened guard shim (R30 defense-in-depth) ---
+    log_info "Generating env guard shim..."
+    local guard_shim="$CONFIG_DIR/.env-guard.sh"
+    cat >"$guard_shim" <<'GUARD_EOF'
+#!/usr/bin/env bash
+# Hardened guard shim: validates grammar + permissions before sourcing
+# env files. Sourced from .bashrc on every interactive shell start.
+# Defense-in-depth: catches drift between reconciler guard runs.
+_env_guard_fail() { echo "ERROR: env-guard: $*" >&2; return 1; }
+_env_guard_check() {
+    local path="$1" want_mode="$2" label="$3"
+    [[ ! -e "$path" ]] && return 0
+    [[ -f "$path" ]] || { _env_guard_fail "$label: $path is not a regular file"; return 1; }
+    local mode owner me
+    mode="$(stat -c %a "$path" 2>/dev/null || echo '?')"
+    owner="$(stat -c %U "$path" 2>/dev/null || echo '?')"
+    me="$(id -un 2>/dev/null || echo '?')"
+    [[ -n "$owner" && "$owner" != "$me" ]] && { _env_guard_fail "$label: owned by '$owner', expected '$me'"; return 1; }
+    [[ "$mode" != "$want_mode" ]] && { _env_guard_fail "$label: mode $mode, expected $want_mode"; return 1; }
+    local lineno=0 line
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        lineno=$((lineno + 1))
+        [[ "$line" =~ ^[[:space:]]*(#|$) ]] && continue
+        [[ "$line" =~ ^[[:space:]]*export([[:space:]]|$) ]] && { _env_guard_fail "$label:$lineno uses export"; return 1; }
+        [[ "$line" == *'`'* || "$line" == *'$('* ]] && { _env_guard_fail "$label:$lineno uses command substitution"; return 1; }
+        [[ ! "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*=[^';\&|<>()$'"'"'\`"]*$ ]] && { _env_guard_fail "$label:$lineno: forbidden metacharacters"; return 1; }
+    done <"$path"
+}
+_env_guard_check "$HOME/.config/heypogi/.env-common" "644" "common" || return 1
+_env_guard_check "$HOME/.config/heypogi/.env-override" "640" "override" || return 1
+_env_guard_check "$HOME/.config/heypogi/.env-secrets" "600" "secrets" || return 1
+set -a
+. "$HOME/.config/heypogi/.env-common"
+[[ -f "$HOME/.config/heypogi/.env-override" ]] && . "$HOME/.config/heypogi/.env-override"
+. "$HOME/.config/heypogi/.env-secrets"
+set +a
+GUARD_EOF
+    chmod 600 "$guard_shim"
+    log_ok "env guard shim generated ($guard_shim)"
 
     # --- Idempotent .bashrc update (marker-bounded reconcile) ---
     log_info "Updating .bashrc..."

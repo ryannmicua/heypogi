@@ -101,8 +101,10 @@ _require_env_check_file() {
         _require_env_fail "require-env: .env-${label} mode $mode, expected $want_mode. Fix: chmod $want_mode $path (and chown to the target user)."
         return 3
     fi
-    # Grammar allowlist: KEY=value only. No `export`, no command
-    # substitution, no backticks, no leading whitespace tricks.
+    # Grammar allowlist: KEY=value only, anchored at end of line.
+    # Rejects: export, command substitution ($(`  `), backticks,
+    # shell metacharacters in values (; & | < > ( ) $ \ ` ' ").
+    local _re_val='^[A-Za-z_][A-Za-z0-9_]*=[^;&|<> ()$'"'"'`"'"'"'\\]*$'
     local lineno=0 line
     while IFS= read -r line || [[ -n "$line" ]]; do
         lineno=$((lineno + 1))
@@ -115,8 +117,8 @@ _require_env_check_file() {
             _require_env_fail "require-env: .env-${label}:$lineno uses command substitution (forbidden)."
             return 3
         fi
-        if [[ ! "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then
-            _require_env_fail "require-env: .env-${label}:$lineno is not KEY=value."
+        if [[ ! "$line" =~ $_re_val ]]; then
+            _require_env_fail "require-env: .env-${label}:$lineno is not KEY=value (forbidden metacharacters in value)."
             return 3
         fi
     done <"$path"

@@ -139,18 +139,13 @@ do_status() {
 
 do_install() {
   if [[ "$DRY_RUN" == true ]]; then
-    log_dry "ensure ${HOME}/.agents/skills/ exists (only with --create-dest)"
+    log_dry "ensure ${HOME}/.agents/skills/ exists (managed parent)"
     log_dry "converge symlink ${dest_path} -> ${expected_target} (conflicting dirs never removed)"
     return 0
   fi
   if [[ ! -d "${dest_dir}" ]]; then
-    if [[ "$CREATE_DEST" != true ]]; then
-      log_err "Destination folder does not exist: ${dest_dir}"
-      log_err "Remediation: re-run with --create-dest (explicit consent to create it)."
-      return 1
-    fi
     mkdir -p "${dest_dir}"
-    log_info "Created ${dest_dir} (--create-dest)."
+    log_info "Created managed parent ${dest_dir}."
   fi
   local st
   st="$(link_state)"

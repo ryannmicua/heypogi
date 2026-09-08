@@ -198,11 +198,11 @@ apt_install_pkg() {
         log_dry "sudo apt-get update && sudo apt-get install -y $pkg"
         return 0
     fi
-    if ! run_priv apt-get update -qq; then
+    if ! run_priv timeout 180 apt-get update -qq; then
         log_err "apt registry unreachable (offline?). Failing without partial mutation."
         return 3
     fi
-    run_priv apt-get install -y -qq "$pkg"
+    run_priv timeout 300 apt-get install -y -qq "$pkg"
 }
 
 install_uv() {

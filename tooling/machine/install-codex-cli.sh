@@ -178,8 +178,8 @@ install_bubblewrap() {
 
   case "${os_id}" in
     ubuntu|debian)
-      run_priv apt-get update || return 3
-      run_priv apt-get install -y bubblewrap || return 3
+      run_priv timeout 180 apt-get update || return 3
+      run_priv timeout 300 apt-get install -y bubblewrap || return 3
       ;;
     fedora)
       run_priv dnf install -y bubblewrap || return 3
@@ -198,8 +198,8 @@ repair_ubuntu_2404_apparmor() {
   fi
 
   log_info "Bubblewrap user namespaces are blocked; loading Ubuntu 24.04's AppArmor profile."
-  run_priv apt-get update || return 3
-  run_priv apt-get install -y apparmor-profiles apparmor-utils || return 3
+  run_priv timeout 180 apt-get update || return 3
+  run_priv timeout 300 apt-get install -y apparmor-profiles apparmor-utils || return 3
 
   local source_profile="/usr/share/apparmor/extra-profiles/bwrap-userns-restrict"
   local target_profile="/etc/apparmor.d/bwrap-userns-restrict"

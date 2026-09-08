@@ -165,12 +165,12 @@ do_install() {
     else
         log_info "apt repo already configured; skipping."
     fi
-    if ! run_priv apt-get update -qq; then
+    if ! run_priv timeout 180 apt-get update -qq; then
         log_err "apt registry unreachable (offline?). Failing without partial mutation."
         apt_rc=3
         return "$apt_rc"
     fi
-    if ! run_priv apt-get install -y -qq gh; then
+    if ! run_priv timeout 300 apt-get install -y -qq gh; then
         log_err "apt install of gh failed."
         return 1
     fi

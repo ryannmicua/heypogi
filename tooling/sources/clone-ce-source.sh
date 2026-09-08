@@ -126,6 +126,10 @@ if [[ -d "${target_dir}" ]]; then
 else
   log_info "Cloning Compound Engineering source into ${target_dir} ..."
   if ! git_net clone --depth 1 "${clone_url}" "${target_dir}"; then
+    # Clean up partial clone artifact (empty dir created by git before failure)
+    if [[ -d "${target_dir}" && ! -d "${target_dir}/.git" ]]; then
+      rm -rf "${target_dir}"
+    fi
     if ! remote_reachable; then
       log_err "Remote unreachable (offline?). Nothing cloned."
       exit 3
