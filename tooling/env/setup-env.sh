@@ -284,6 +284,9 @@ do_install() {
 # Hardened guard shim: validates grammar + permissions before sourcing
 # env files. Sourced from .bashrc on every interactive shell start.
 # Defense-in-depth: catches drift between reconciler guard runs.
+# set -e ensures guard failures are fatal in both sourced and
+# executed-directly modes (fail-closed).
+set -e
 _env_guard_fail() { echo "ERROR: env-guard: $*" >&2; return 1; }
 _env_guard_re='^[A-Za-z_][A-Za-z0-9_]*=[^;&|<> ()$'"'"'`"'"'"'\\]*$'
 _env_guard_check() {
@@ -303,7 +306,9 @@ _env_guard_check() {
         [[ "$line" =~ ^[[:space:]]*export([[:space:]]|$) ]] && { _env_guard_fail "$label:$lineno uses export"; return 1; }
         [[ "$line" == *'`'* || "$line" == *'$('* ]] && { _env_guard_fail "$label:$lineno uses command substitution"; return 1; }
         [[ ! "$line" =~ $_env_guard_re ]] && { _env_guard_fail "$label:$lineno: forbidden metacharacters"; return 1; }
+        true  # ensure loop exit code is 0 when all lines pass (set -e safe)
     done <"$path"
+    return 0
 }
 _env_guard_check "$HOME/.config/heypogi/.env-common" "644" "common" || return 1
 _env_guard_check "$HOME/.config/heypogi/.env-override" "640" "override" || return 1
