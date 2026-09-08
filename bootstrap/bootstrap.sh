@@ -151,6 +151,7 @@ if [[ "$EUID" -eq 0 && "$TARGET_USER" == "root" && "$TARGET_USER_EXPLICIT" != tr
     log_err "Remediation: re-run with --user TARGET (leaf installers are never run wholesale as root)."
     exit 2
 fi
+TARGET_UID="$(id -u "$TARGET_USER")"
 # R21/KTD6: refuse UID 0 (root) without explicit --user to prevent
 # --user 0 bypassing the literal-string root check above.
 if [[ "$TARGET_UID" -eq 0 && "$TARGET_USER_EXPLICIT" != true ]]; then
@@ -165,7 +166,6 @@ if [[ "$EUID" -eq 0 && "$TARGET_USER" == "root" ]]; then
     log_err "Remediation: run without --user to use the current user, or omit --user and run as the target user directly."
     exit 2
 fi
-TARGET_UID="$(id -u "$TARGET_USER")"
 TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
 if [[ -z "$TARGET_HOME" ]]; then
     log_err "Could not resolve home directory for '$TARGET_USER' (getent passwd failed)."
@@ -196,7 +196,7 @@ fi
 # PATH for TARGET; sudo -u down-switch only when privileged.
 as_target() {
     if [[ "$DRY_RUN" == true ]]; then
-        dry_echo "(as $TARGET_USER) $*"
+        log_dry "(as $TARGET_USER) $*"
         return 0
     fi
     if [[ "$NEED_SWITCH" == true ]]; then
@@ -309,7 +309,8 @@ do_status() {
             log_info "External source present: $src"
         else
             log_warn "External source missing: $src"
-            if [[ "$worst" -ne 3 ]]; then worst=1; fi
+            # Route through aggregator hierarchy: 3 (blocked) > 2 (usage) > 1 (drift)
+            if [[ "$worst" -eq 0 ]]; then worst=1; fi
         fi
     done
     check_downstream "$HEYPOGI_ROOT/tooling/dev-stack/dev-stack.sh" status -q

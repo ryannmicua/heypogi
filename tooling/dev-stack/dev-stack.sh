@@ -965,6 +965,7 @@ do_start_app() {
 # --- Stop ---
 do_stop_app() {
     local app="$1"
+    local stop_rc=0
     
     case "$app" in
         opencode)
@@ -980,8 +981,12 @@ do_stop_app() {
                 pid=$(get_listening_pid "$OPENCHAMBER_PORT")
                 if [[ -n "$pid" ]]; then
                     echo_info "Stopping OpenChamber (pid $pid)..."
-                    kill "$pid" 2>/dev/null
+                    kill "$pid" 2>/dev/null || stop_rc=$?
                     sleep 1
+                    if [[ $stop_rc -ne 0 ]]; then
+                        echo_err "Failed to stop OpenChamber (pid $pid)."
+                        return $stop_rc
+                    fi
                     echo_success "OpenChamber stopped"
                 fi
             else
@@ -997,9 +1002,13 @@ do_stop_app() {
                 echo_info "Stopping Paseo daemon..."
                 ensure_user_bus
                 if systemctl --user list-unit-files paseo.service &>/dev/null 2>&1; then
-                    systemctl --user stop paseo.service 2>/dev/null
+                    systemctl --user stop paseo.service 2>/dev/null || stop_rc=$?
                 else
-                    paseo daemon stop 2>/dev/null
+                    paseo daemon stop 2>/dev/null || stop_rc=$?
+                fi
+                if [[ $stop_rc -ne 0 ]]; then
+                    echo_err "Failed to stop Paseo daemon."
+                    return $stop_rc
                 fi
                 echo_success "Paseo daemon stopped"
             else
@@ -1007,6 +1016,7 @@ do_stop_app() {
             fi
             ;;
     esac
+    return $stop_rc
 }
 
 # --- Fix ---
@@ -1112,14 +1122,22 @@ startup_ensure_allowlist_lines() {
 
     # Build the desired unit file content: keep all lines except the
     # legacy whole-secrets line, and ensure the three allowlist lines
-    # are present before ExecStart=.
+    # are present before ExecStart=. Track whether any allowlist line
+    # was absent from the SOURCE (target) to detect drift.
     local allowlist_inserted=0
+    local _el_common="EnvironmentFile=-%h/.config/heypogi/.env-common"
+    local _el_override="EnvironmentFile=-%h/.config/heypogi/.env-override"
+    local _el_paseo="EnvironmentFile=-%h/.config/heypogi/.env-paseo"
     while IFS= read -r src_line || [[ -n "$src_line" ]]; do
         # Skip legacy whole-secrets line
         if [[ "$src_line" =~ ^EnvironmentFile=-.*\.config/heypogi/\.env-secrets$ ]]; then
             changed=1
             continue
         fi
+        # Track if any allowlist line is missing from the source
+        [[ "$src_line" == "$_el_common" ]] && _el_common=""
+        [[ "$src_line" == "$_el_override" ]] && _el_override=""
+        [[ "$src_line" == "$_el_paseo" ]] && _el_paseo=""
         # Insert allowlist lines before the first ExecStart=
         if [[ "$allowlist_inserted" -eq 0 && "$src_line" =~ ^ExecStart= ]]; then
             printf '%s\n' "EnvironmentFile=-%h/.config/heypogi/.env-common" >>"$tmp_target"
@@ -1138,13 +1156,8 @@ startup_ensure_allowlist_lines() {
         allowlist_inserted=1
     fi
 
-    # Check if any allowlist line was missing (even if we didn't skip
-    # the secrets line, the content may have changed)
-    for line in "EnvironmentFile=-%h/.config/heypogi/.env-common" \
-                "EnvironmentFile=-%h/.config/heypogi/.env-override" \
-                "EnvironmentFile=-%h/.config/heypogi/.env-paseo"; do
-        grep -qF "$line" "$tmp_target" 2>/dev/null || changed=1
-    done
+    # If any allowlist line was absent from the source, mark changed
+    [[ -n "$_el_common" || -n "$_el_override" || -n "$_el_paseo" ]] && changed=1
 
     if [[ "$changed" -eq 0 ]]; then
         rm -f "$tmp_target"

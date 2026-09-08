@@ -285,6 +285,7 @@ do_install() {
 # env files. Sourced from .bashrc on every interactive shell start.
 # Defense-in-depth: catches drift between reconciler guard runs.
 _env_guard_fail() { echo "ERROR: env-guard: $*" >&2; return 1; }
+_env_guard_re='^[A-Za-z_][A-Za-z0-9_]*=[^;&|<> ()$'"'"'`"'"'"'\\]*$'
 _env_guard_check() {
     local path="$1" want_mode="$2" label="$3"
     [[ ! -e "$path" ]] && return 0
@@ -301,7 +302,7 @@ _env_guard_check() {
         [[ "$line" =~ ^[[:space:]]*(#|$) ]] && continue
         [[ "$line" =~ ^[[:space:]]*export([[:space:]]|$) ]] && { _env_guard_fail "$label:$lineno uses export"; return 1; }
         [[ "$line" == *'`'* || "$line" == *'$('* ]] && { _env_guard_fail "$label:$lineno uses command substitution"; return 1; }
-        [[ ! "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*=[^';\&|<>()$'"'"'\`"]*$ ]] && { _env_guard_fail "$label:$lineno: forbidden metacharacters"; return 1; }
+        [[ ! "$line" =~ $_env_guard_re ]] && { _env_guard_fail "$label:$lineno: forbidden metacharacters"; return 1; }
     done <"$path"
 }
 _env_guard_check "$HOME/.config/heypogi/.env-common" "644" "common" || return 1
