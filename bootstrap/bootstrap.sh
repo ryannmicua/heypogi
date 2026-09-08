@@ -106,6 +106,12 @@ Options:
   --dry-run        Plan only: forwarded to every child; zero writes.
   -h, --help       Show this help (side-effect-free).
 
+Preflight (before any mutation, --force never skips): env files set up
+  once by the user (`setup-env.sh install` as TARGET, then fill in
+  secrets); PASEO_PASSWORD set when Paseo will start; linger enabled
+  (`sudo loginctl enable-linger TARGET`) when the user unit will start.
+  Each failure prints its exact remediation and exits 3.
+
 Exit codes: 0 converged, 1 drift/failed, 2 usage error, 3 blocked.
 EOF
     return 0
@@ -194,16 +200,20 @@ fi
 
 # Run a command in the target context (R21): user bus + userspace-first
 # PATH for TARGET; sudo -u down-switch only when privileged.
-as_target() {
-    if [[ "$DRY_RUN" == true ]]; then
-        log_dry "(as $TARGET_USER) $*"
-        return 0
-    fi
+exec_as_target() {
     if [[ "$NEED_SWITCH" == true ]]; then
         sudo -u "$TARGET_USER" env "HOME=$TARGET_HOME" "XDG_RUNTIME_DIR=$TARGET_XDG" "PATH=$TARGET_PATH" "$@"
     else
         env "HOME=$TARGET_HOME" "XDG_RUNTIME_DIR=$TARGET_XDG" "PATH=$TARGET_PATH" "$@"
     fi
+}
+
+as_target() {
+    if [[ "$DRY_RUN" == true ]]; then
+        log_dry "(as $TARGET_USER) $*"
+        return 0
+    fi
+    exec_as_target "$@"
 }
 
 # --- Run-history marker (R14-R17/R27) ---
@@ -326,12 +336,59 @@ do_status() {
     return "$worst"
 }
 
+# --- preflight: things only the user can do, verified before any mutation ---
+do_preflight() {
+    # Read-only gates. Runs before the confirm prompt and before every
+    # step (identically under --dry-run, where it reports blockers with
+    # the same exit code but writes nothing). --force never skips these:
+    # they are preconditions, not confirmations.
+    local block=0
+
+    # 1. Env files must already exist (first-time setup by the user as
+    #    TARGET, including secrets only they know). Presence only - Step 0
+    #    reconverges content/perms/marker block. Uses exec_as_target (not
+    #    as_target): this check is read-only, so it executes for real
+    #    even under --dry-run.
+    if ! exec_as_target bash -c 'd="$HOME/.config/heypogi"; [[ -f "$d/.env-common" && -f "$d/.env-secrets" ]]'; then
+        log_err "Preflight: heypogi env files are not set up for $TARGET_USER."
+        log_err "Remediation (once, as $TARGET_USER): bash $HEYPOGI_ROOT/tooling/env/setup-env.sh install"
+        log_err "Then fill in secrets in ~/.config/heypogi/.env-secrets and re-run bootstrap."
+        block=3
+    fi
+
+    # 2. Required secrets for this run's scope. Paseo binds 0.0.0.0, so
+    #    its password must exist before the startup/start steps; the
+    #    leaves would only fail closed there (exit 3 deep into the run).
+    if [[ "$SKIP_PASEO" == false && "$SKIP_SERVICES" == false ]]; then
+        if ! exec_as_target bash -c '[[ -n "${PASEO_PASSWORD:-}" ]] && exit 0; f="$HOME/.config/heypogi/.env-secrets"; [[ -f "$f" ]] && grep -qE "^PASEO_PASSWORD=.+" "$f"'; then
+            log_err "Preflight: PASEO_PASSWORD is not set for $TARGET_USER, but this run starts Paseo."
+            log_err "Remediation: set PASEO_PASSWORD in ~$TARGET_USER/.config/heypogi/.env-secrets, then re-run bootstrap."
+            block=3
+        fi
+
+        # 3. Linger for the rootless user unit. Only the user (via their
+        #    sudo) can grant this; bootstrap never attempts it.
+        local linger
+        linger="$(loginctl show-user "$TARGET_USER" 2>/dev/null | grep -i '^Linger=' || echo 'Linger=unknown')"
+        if [[ "$linger" != "Linger=yes" ]]; then
+            log_err "Preflight: linger is off for $TARGET_USER (the user unit would stop at logout)."
+            log_err "Remediation (once, requires sudo): sudo loginctl enable-linger $TARGET_USER"
+            log_err "Then re-run bootstrap."
+            block=3
+        fi
+    fi
+
+    return "$block"
+}
+
 # --- install flow (env-first order, HLD) ---
 do_install() {
     if [[ "$DRY_RUN" == true ]]; then
         log_dry "target=$TARGET_USER uid=$TARGET_UID home=$TARGET_HOME xdg=$TARGET_XDG (as-target switch: $NEED_SWITCH)"
         log_dry "order: setup-env -> check-prereqs -> userspace-shims -> agents -> sources -> dev-stack -> skills -> startup+start"
     fi
+
+    do_preflight || return $?
 
     log_info "AI Agentic Dev VM Bootstrap"
     log_info "  Target user:  $TARGET_USER ($TARGET_HOME)"

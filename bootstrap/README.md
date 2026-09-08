@@ -124,6 +124,25 @@ a userspace-first PATH, and the systemd user bus for TARGET. Only apt,
 linger, and legacy-unit removal use sudo (logged, dry-run aware). Root
 without `--user` is rejected - leaves are never run wholesale as root.
 
+### Preflight (things only you can do, checked first)
+
+Before any mutation - and before the confirmation prompt - bootstrap
+verifies three preconditions and stops with the exact remediation
+(exit 3) on the first failure. `--force` never skips these:
+
+1. **Env files exist** for TARGET (`~/.config/heypogi/.env-common` +
+   `.env-secrets`). First-time setup is yours:
+   ```bash
+   bash tooling/env/setup-env.sh install   # as TARGET
+   # then fill in secrets in ~/.config/heypogi/.env-secrets
+   ```
+2. **`PASEO_PASSWORD` is set** (env var or secrets file) whenever the
+   run will start Paseo (i.e. unless `--skip-paseo`/`--skip-services`).
+3. **Linger is enabled** for TARGET whenever the user unit will start:
+   ```bash
+   sudo loginctl enable-linger TARGET   # once, requires sudo
+   ```
+
 ### Dry run (zero writes, incl. marker/logs/children)
 
 ```bash
