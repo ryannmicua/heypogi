@@ -57,11 +57,14 @@ PKG_PASEO="@getpaseo/cli"
 
 # --- Colors (stdout decoration only: empty unless stdout is a TTY and
 # NO_COLOR is unset; stderr helpers below gate on fd 2 themselves) ---
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+# NOTE: $'...' (ANSI-C quoting) so the vars hold a real ESC byte.
+# Plain '\033[..]' in single quotes is literal backslash text, and
+# `printf '%s' "$VAR"` does NOT re-interpret it - it prints literally.
+RED=$'\033[0;31m'
+GREEN=$'\033[0;32m'
+YELLOW=$'\033[1;33m'
+BLUE=$'\033[0;34m'
+NC=$'\033[0m'
 if [[ -n "${NO_COLOR:-}" ]] || [[ ! -t 1 ]]; then
     RED=''; GREEN=''; YELLOW=''; BLUE=''; NC=''
 fi
