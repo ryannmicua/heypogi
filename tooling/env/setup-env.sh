@@ -284,11 +284,24 @@ do_install() {
 # Hardened guard shim: validates grammar + permissions before sourcing
 # env files. Sourced from .bashrc on every interactive shell start.
 # Defense-in-depth: catches drift between reconciler guard runs.
-# set -e ensures guard failures are fatal in both sourced and
-# executed-directly modes (fail-closed).
+# Quoting: a whole value may be wrapped in one matching pair of quotes.
+# Single quotes are fully literal (use for passwords containing $ etc.).
+# Double quotes are literal except $, backtick and backslash, which stay
+# forbidden because the shell would expand/interpret them there.
+# Fail-closed internally (set -e during checks), but the sourcing
+# shell's errexit setting is saved and restored: leaking set -e into
+# an interactive login shell would drop the session on the first
+# failing command (e.g. any reconciler reporting drift).
+_env_guard_had_errexit=false
+case $- in *e*) _env_guard_had_errexit=true ;; esac
 set -e
 _env_guard_fail() { echo "ERROR: env-guard: $*" >&2; return 1; }
 _env_guard_re='^[A-Za-z_][A-Za-z0-9_]*=[^;&|<> ()$'"'"'`"'"'"'\\]*$'
+# Quoted-value branch patterns as variables: a raw single quote cannot
+# appear inside a [[ =~ ]] literal (shell quote removal runs first),
+# so the single-quote pattern lives in a double-quoted variable.
+_env_guard_re_dq='^[A-Za-z_][A-Za-z0-9_]*="([^"]*)"$'
+_env_guard_re_sq="^[A-Za-z_][A-Za-z0-9_]*='([^']*)'$"
 _env_guard_check() {
     local path="$1" want_mode="$2" label="$3"
     [[ ! -e "$path" ]] && return 0
@@ -303,6 +316,21 @@ _env_guard_check() {
     while IFS= read -r line || [[ -n "$line" ]]; do
         lineno=$((lineno + 1))
         [[ "$line" =~ ^[[:space:]]*(#|$) ]] && continue
+        # Double-quoted whole value: spaces and most punctuation are
+        # literal, but $, backtick and backslash stay forbidden (the
+        # shell would expand/interpret them inside double quotes).
+        if [[ "$line" =~ $_env_guard_re_dq ]]; then
+            local inner="${BASH_REMATCH[1]}"
+            [[ "$inner" == *'$'* || "$inner" == *'`'* || "$inner" == *'\'* ]] \
+                && { _env_guard_fail "$label:$lineno: expansion trigger inside double quotes"; return 1; }
+            continue
+        fi
+        # Single-quoted whole value: the shell passes everything through
+        # literally (only the quote itself cannot appear inside), so $
+        # and friends are plain strings here by construction.
+        if [[ "$line" =~ $_env_guard_re_sq ]]; then
+            continue
+        fi
         [[ "$line" =~ ^[[:space:]]*export([[:space:]]|$) ]] && { _env_guard_fail "$label:$lineno uses export"; return 1; }
         [[ "$line" == *'`'* || "$line" == *'$('* ]] && { _env_guard_fail "$label:$lineno uses command substitution"; return 1; }
         [[ ! "$line" =~ $_env_guard_re ]] && { _env_guard_fail "$label:$lineno: forbidden metacharacters"; return 1; }
@@ -310,14 +338,24 @@ _env_guard_check() {
     done <"$path"
     return 0
 }
-_env_guard_check "$HOME/.config/heypogi/.env-common" "644" "common" || return 1
-_env_guard_check "$HOME/.config/heypogi/.env-override" "640" "override" || return 1
-_env_guard_check "$HOME/.config/heypogi/.env-secrets" "600" "secrets" || return 1
+_env_guard_restore() {
+    # Restore the sourcing shell's errexit setting (fail-closed checks
+    # above run under set -e, but the setting must not leak outward).
+    if [[ "${_env_guard_had_errexit:-false}" != true ]]; then
+        set +e
+    fi
+    unset _env_guard_had_errexit
+    return 0
+}
+_env_guard_check "$HOME/.config/heypogi/.env-common" "644" "common" || { _env_guard_restore; return 1; }
+_env_guard_check "$HOME/.config/heypogi/.env-override" "640" "override" || { _env_guard_restore; return 1; }
+_env_guard_check "$HOME/.config/heypogi/.env-secrets" "600" "secrets" || { _env_guard_restore; return 1; }
 set -a
 . "$HOME/.config/heypogi/.env-common"
 [[ -f "$HOME/.config/heypogi/.env-override" ]] && . "$HOME/.config/heypogi/.env-override"
 . "$HOME/.config/heypogi/.env-secrets"
 set +a
+_env_guard_restore
 GUARD_EOF
     chmod 600 "$guard_shim"
     log_ok "env guard shim generated ($guard_shim)"

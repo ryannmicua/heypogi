@@ -98,7 +98,21 @@ REPO_BIN_DIR="$(cd "$SCRIPT_DIR" && pwd -P)"
 DEVSTACK_LINK="$REPO_BIN_DIR/dev-stack"
 DEVSTACK_TARGET="../dev-stack/dev-stack.sh"
 
-resolve() { cd "$1" 2>/dev/null && pwd -P || printf '%s' "$1"; }
+resolve() {
+    # Canonicalize a path, resolving symlinks for files and
+    # directories alike. cd/pwd alone only canonicalizes
+    # directories: for a file symlink it fails and echoes the input
+    # unchanged, so shim comparisons must go through readlink -f
+    # (coreutils, present on all target systems) first.
+    if command -v readlink >/dev/null 2>&1; then
+        local out
+        if out="$(readlink -f -- "$1" 2>/dev/null)" && [[ -n "$out" ]]; then
+            printf '%s' "$out"
+            return 0
+        fi
+    fi
+    cd "$1" 2>/dev/null && pwd -P || printf '%s' "$1"
+}
 
 npm_prefix() { npm config get prefix 2>/dev/null || echo ""; }
 
@@ -175,6 +189,9 @@ do_status() {
 
 ensure_shim() {
     # $1=tool. Creates/refreshes ~/.local/bin/<tool> -> ../node-bin/<tool>.
+    # The link target stays node-bin-relative so shims float across
+    # Node upgrades when node-bin is repointed; correctness is judged
+    # by the canonical (readlink -f) comparison in do_status.
     local tool="$1"
     local src="$NODE_BIN_LINK/$tool" dest="$LOCAL_BIN/$tool"
     [[ -x "$src" ]] || return 0
@@ -189,11 +206,11 @@ ensure_shim() {
         return 1
     fi
     if [[ "$DRY_RUN" == true ]]; then
-        log_dry "ln -sfn $want $dest"
+        log_dry "ln -sfn $src $dest"
         return 0
     fi
-    ln -sfn "$want" "$dest"
-    log_ok "shim ~/.local/bin/$tool -> $want"
+    ln -sfn "$src" "$dest"
+    log_ok "shim ~/.local/bin/$tool -> $src"
 }
 
 do_install() {
