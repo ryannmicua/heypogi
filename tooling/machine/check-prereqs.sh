@@ -11,16 +11,19 @@
 #
 # Commands:
 #   status   Read-only verification of all prerequisites (default).
-#   install  apt-install curl/git/bubblewrap/uv where missing, then
-#            verify. Never provisions Node.js or Docker itself.
+#   install  apt-install curl/git/bubblewrap/uv where missing, install
+#            nvm + Node.js LTS in user space when missing, then verify.
+#            Docker and AVX are verified, never provisioned.
 #
-# Managed state: system packages (curl, git, bubblewrap, uv) via apt.
-# Network: apt registry + uv installer download (install only).
+# Managed state: system packages (curl, git, bubblewrap, uv) via apt;
+#   nvm + Node.js LTS in ~/.nvm (user space, no sudo).
+# Network: apt registry, uv installer, nvm GitHub repo, Node.js
+#   binary download (install only).
 # Privilege: narrowly scoped `sudo` for apt commands only, logged
 #   before execution and honored by --dry-run. User-scoped work is
 #   never run as root: invoke this script as the target user.
 # Exit codes: 0 converged, 1 drift/mutation failed, 2 usage error,
-#   3 blocked (missing Node/npm/AVX/Docker, unreachable registry).
+#   3 blocked (missing AVX/Docker, unreachable registry).
 #=======================================================================
 set -euo pipefail
 
@@ -62,8 +65,10 @@ Usage:
 
 Commands:
   status   Read-only check of node/npm/curl/git/docker/uv/AVX (default).
-  install  Install curl, git, bubblewrap, uv via apt where missing;
-           Node.js, Docker, and AVX are verified, never provisioned.
+  install  Install curl, git, bubblewrap via apt where missing; install
+           nvm + Node.js LTS in user space if missing; install uv via
+           official installer if missing; verify docker/AVX (blockers,
+           never provisioned).
 
 Options:
   -f, --force   Re-apply managed packages (curl/git/bubblewrap/uv)
@@ -111,6 +116,107 @@ node_major() {
     printf '%s' "${v%%.*}"
 }
 
+NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+NODE_LTS_ALIAS="lts/*"
+
+# Source nvm.sh if available, without activating it (--no-use).
+# --no-use loads nvm functions without switching to the default Node version,
+# which keeps the script's PATH predictable. The actual Node activation
+# happens via symlink-nvm-node-bin.sh in the userspace-shims step.
+source_nvm() {
+    if [[ -f "$NVM_DIR/nvm.sh" ]]; then
+        # shellcheck disable=SC1091
+        . "$NVM_DIR/nvm.sh" --no-use >/dev/null 2>&1
+        return 0
+    fi
+    return 1
+}
+
+install_nvm() {
+    # Install nvm from the official GitHub repo if not present.
+    # User-space only (no sudo). Idempotent: skips if ~/.nvm exists.
+    #
+    # WHY GIT CLONE INSTEAD OF THE OFFICIAL CURL SCRIPT:
+    # The official install script (curl -o- .../install.sh | bash) modifies
+    # shell profiles (.bashrc, .profile, etc.) to add nvm source lines.
+    # heypogi's setup-env.sh already manages PATH and profile entries via
+    # env-common.template, so the curl script would create duplicate profile
+    # entries. The git clone approach gives us the same nvm installation
+    # without touching profiles - cleaner, deterministic, and compatible
+    # with heypogi's layered env setup.
+    if [[ -d "$NVM_DIR" ]]; then
+        log_info "nvm directory present: $NVM_DIR"
+        source_nvm || true
+        return 0
+    fi
+    if [[ "$DRY_RUN" == true ]]; then
+        log_dry "git clone https://github.com/nvm-sh/nvm.git $NVM_DIR"
+        log_dry "source $NVM_DIR/nvm.sh && nvm install --lts && nvm alias default '$NODE_LTS_ALIAS'"
+        return 0
+    fi
+    if ! command -v git >/dev/null 2>&1; then
+        log_err "git is required to install nvm; install git first."
+        return 3
+    fi
+    log_info "Installing nvm to $NVM_DIR ..."
+    local nvm_tag
+    # Query GitHub API for latest release tag (e.g., v0.40.7). This is
+    # equivalent to the install.sh's nvm_latest_version() function but
+    # gives us the tag directly without sourcing nvm internals. Falls
+    # back to master if offline or rate-limited.
+    nvm_tag="$(curl -fsSL --connect-timeout 10 --max-time 15 https://api.github.com/repos/nvm-sh/nvm/releases/latest 2>/dev/null | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/' || echo '')"
+    if [[ -z "$nvm_tag" ]]; then
+        # Fallback: clone main if the API call fails (offline or rate-limited).
+        nvm_tag="master"
+        log_warn "Could not determine latest nvm release; cloning main branch."
+    fi
+    if ! git clone --branch "$nvm_tag" --depth 1 https://github.com/nvm-sh/nvm.git "$NVM_DIR" 2>&1; then
+        log_err "Failed to clone nvm (offline?)."
+        return 3
+    fi
+    source_nvm || {
+        log_err "nvm installed but nvm.sh could not be sourced."
+        return 1
+    }
+    log_ok "nvm $nvm_tag installed"
+}
+
+install_node_lts() {
+    # Install Node.js LTS via nvm if no suitable Node is present.
+    # Sets the default alias so future shells pick it up.
+    #
+    # Uses 'lts/*' (latest LTS) rather than a pinned version to stay
+    # current without manual updates. The 'default' alias ensures new
+    # shells automatically use this version.
+    source_nvm || {
+        log_err "nvm not available; cannot install Node.js."
+        return 3
+    }
+    # Check if current node meets the minimum version.
+    local current_major
+    current_major="$(node_major)"
+    if [[ "$current_major" =~ ^[0-9]+$ ]] && [[ "$current_major" -ge "$NODE_MIN_MAJOR" ]]; then
+        log_ok "Node.js $(node --version) already meets minimum (>= $NODE_MIN_MAJOR)"
+        return 0
+    fi
+    if [[ "$DRY_RUN" == true ]]; then
+        log_dry "nvm install --lts && nvm alias default '$NODE_LTS_ALIAS'"
+        return 0
+    fi
+    log_info "Installing Node.js LTS via nvm ..."
+    if ! nvm install --lts 2>&1; then
+        log_err "nvm install --lts failed."
+        return 1
+    fi
+    if ! nvm alias default "$NODE_LTS_ALIAS" 2>&1; then
+        log_err "nvm alias default failed."
+        return 1
+    fi
+    # Re-source to activate the newly installed version in this shell.
+    source_nvm || true
+    log_ok "Node.js $(node --version) installed via nvm (default: $NODE_LTS_ALIAS)"
+}
+
 # Results: DRIFT=1 (installable gap), BLOCKED=3 (unprovisionable gap).
 DRIFT=0
 BLOCKED=0
@@ -118,16 +224,16 @@ BLOCK_MSGS=()
 
 check_node() {
     if ! command -v node >/dev/null 2>&1; then
-        log_err "Node.js not found (blocker)."
-        BLOCK_MSGS+=("Install Node.js 22+: curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt-get install -y nodejs")
+        log_err "Node.js not found."
+        BLOCK_MSGS+=("Run: nvm install --lts && nvm alias default '$NODE_LTS_ALIAS' (or re-run bootstrap install)")
         BLOCKED=1
         return
     fi
     local major
     major="$(node_major)"
     if [[ ! "$major" =~ ^[0-9]+$ ]] || [[ "$major" -lt "$NODE_MIN_MAJOR" ]]; then
-        log_err "Node.js major version ${major:-unknown} < ${NODE_MIN_MAJOR} (blocker)."
-        BLOCK_MSGS+=("Upgrade Node.js to 22+: curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt-get install -y nodejs")
+        log_err "Node.js major version ${major:-unknown} < ${NODE_MIN_MAJOR}."
+        BLOCK_MSGS+=("Run: nvm install --lts && nvm alias default '$NODE_LTS_ALIAS' (or re-run bootstrap install)")
         BLOCKED=1
         return
     fi
@@ -136,8 +242,8 @@ check_node() {
 
 check_npm() {
     if ! command -v npm >/dev/null 2>&1; then
-        log_err "npm not found (blocker)."
-        BLOCK_MSGS+=("npm ships with Node.js 22+: reinstall Node.js per the NodeSource instructions above.")
+        log_err "npm not found."
+        BLOCK_MSGS+=("npm ships with Node.js; run: nvm install --lts (or re-run bootstrap install)")
         BLOCKED=1
         return
     fi
@@ -263,22 +369,10 @@ do_status() {
 
 do_install() {
     if [[ "$DRY_RUN" == true ]]; then
-        log_dry "Plan: apt-install missing curl/git/bubblewrap; install uv if missing; verify node/npm/docker/AVX (blockers, never provisioned)."
+        log_dry "Plan: apt-install curl/git/bubblewrap; install nvm + Node.js LTS if missing; install uv if missing; verify docker/AVX (blockers, never provisioned)."
     fi
-    # Blockers first: validate before mutating where the check is free.
-    DRIFT=0; BLOCKED=0; BLOCK_MSGS=()
-    check_node
-    check_npm
-    check_avx
-    check_docker
-    if [[ "$BLOCKED" -ne 0 ]]; then
-        for m in "${BLOCK_MSGS[@]}"; do log_err "Remediation: $m"; done
-        log_err "Blocked: resolve the above before install can converge."
-        return 3
-    fi
+    # System packages first: curl is needed for nvm/uv installs.
     local rc=0
-    # -f/--force re-applies the managed packages even when their
-    # binaries resolve (repair scope: declared apt targets only).
     if ! command -v curl >/dev/null 2>&1 || [[ "$FORCE" == true ]]; then
         apt_install_pkg "curl" || rc=$?
         [[ "$rc" -eq 3 ]] && return 3
@@ -297,12 +391,28 @@ do_install() {
     if ! command -v uv >/dev/null 2>&1 || [[ "$FORCE" == true ]]; then
         install_uv || return $?
     fi
+    # Node.js via nvm: install nvm if missing, then provision Node LTS.
+    install_nvm || return $?
+    install_node_lts || return $?
+    # Re-check everything after provisioning.
     if [[ "$DRY_RUN" == true ]]; then
         log_dry "Verify-only in dry-run; no writes performed."
         return 0
     fi
     hash -r 2>/dev/null || true
-    do_status
+    # Non-blocking verifications (docker/AVX still blockers).
+    DRIFT=0; BLOCKED=0; BLOCK_MSGS=()
+    check_node
+    check_npm
+    check_avx
+    check_docker
+    if [[ "$BLOCKED" -ne 0 ]]; then
+        for m in "${BLOCK_MSGS[@]}"; do log_err "Remediation: $m"; done
+        log_err "Blocked: resolve the above before install can converge."
+        return 3
+    fi
+    [[ "$DRIFT" -ne 0 ]] && return 1
+    return 0
 }
 
 case "$COMMAND" in

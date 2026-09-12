@@ -428,8 +428,9 @@ do_install() {
         log_ok "Pre-existing env verified."
     fi
 
-    # Step 1: system prerequisites (installs curl/git/bwrap/uv; Node,
-    # Docker, AVX are fail-closed blockers with remediation).
+    # Step 1: system prerequisites (installs curl/git/bwrap/uv via apt,
+    #   nvm + Node.js LTS in user space; Docker and AVX are fail-closed
+    #   blockers with remediation).
     run_child "Step 1: prerequisites (check-prereqs)" \
         "$HEYPOGI_ROOT/tooling/machine/check-prereqs.sh" install || return $?
 
