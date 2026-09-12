@@ -439,41 +439,23 @@ collect_status() {
         add_check "Paseo" "Config exists" "false" "$paseo_cfg not found"
     fi
 
-    # Secrets allowlist (R28): the user unit loads .env-common +
-    # .env-override + .env-paseo, never the whole .env-secrets file.
-    local allowlist="$HOME/.config/heypogi/.env-paseo"
-    local secrets_pw allowlist_pw
-    secrets_pw="$(grep -E '^PASEO_PASSWORD=' "$HOME/.config/heypogi/.env-secrets" 2>/dev/null | tail -1 | cut -d= -f2- || echo '')"
-    allowlist_pw="$(grep -E '^PASEO_PASSWORD=' "$allowlist" 2>/dev/null | tail -1 | cut -d= -f2- || echo '')"
-    if [[ -n "$secrets_pw" ]]; then
-        if [[ "$allowlist_pw" == "$secrets_pw" ]]; then
-            add_check "Paseo" "Secrets allowlist" "true" ".env-paseo matches .env-secrets (password never logged)"
-        else
-            add_check "Paseo" "Secrets allowlist" "false" ".env-paseo stale or missing; run 'install -a paseo'"
-        fi
-    else
-        if [[ -f "$allowlist" ]]; then
-            add_check "Paseo" "Secrets allowlist" "true" "no PASEO_PASSWORD set; allowlist file present"
-        else
-            add_warn "Paseo" "Secrets allowlist" ".env-paseo not generated yet; run 'install -a paseo'"
-        fi
-    fi
+    # Secrets loading: the user unit loads .env-common + .env-override +
+    # .env-secrets directly. Agents need these vars at runtime; the threat
+    # model is the model seeing secrets in context, not the process having
+    # them in env.
     local user_unit="$HOME/.config/systemd/user/paseo.service"
     if [[ -f "$user_unit" ]]; then
         if grep -qF "EnvironmentFile=-%h/.config/heypogi/.env-secrets" "$user_unit" 2>/dev/null; then
-            add_check "Paseo" "Unit loads allowlist only" "false" "unit still loads whole .env-secrets; run 'startup fix -a paseo'"
-        elif grep -qF "EnvironmentFile=-%h/.config/heypogi/.env-paseo" "$user_unit" 2>/dev/null; then
-            add_check "Paseo" "Unit loads allowlist only" "true" "no whole-secrets line in user unit"
+            add_check "Paseo" "Unit loads .env-secrets" "true" "unit loads .env-secrets directly"
         else
-            add_check "Paseo" "Unit loads allowlist only" "false" "allowlist line missing; run 'startup fix -a paseo'"
+            add_check "Paseo" "Unit loads .env-secrets" "false" ".env-secrets line missing; run 'startup fix -a paseo'"
         fi
     fi
 }
 
-# --- Paseo config seed + secrets allowlist + fail-closed (R7/R28/R29) ---
+# --- Paseo config seed + fail-closed (R7/R29) ---
 PASEO_HOME_DIR="$HOME/.paseo"
 PASEO_LIVE_CONFIG="$PASEO_HOME_DIR/config.json"
-PASEO_ENV_FILE="$HOME/.config/heypogi/.env-paseo"
 PASEO_SECRETS_FILE="$HOME/.config/heypogi/.env-secrets"
 LEGACY_SYSTEM_UNIT="/etc/systemd/system/paseo.service"
 
@@ -502,18 +484,33 @@ seed_paseo_config() {
     fi
     mkdir -p "$PASEO_HOME_DIR"
     if [[ ! -f "$PASEO_LIVE_CONFIG" ]]; then
-        echo_info "Seeding Paseo config from template (no auth.password key: set it with 'paseo daemon set-password')..."
+        echo_info "Seeding Paseo config from template..."
         cp "$template" "$PASEO_LIVE_CONFIG"
         chmod 600 "$PASEO_LIVE_CONFIG"
-        ensure_paseo_env_allowlist || return $?
         if paseo_password_set; then
-            echo_err "PASEO_PASSWORD is set but the config has no password hash."
-            echo_err "The daemon will start but reject all connections."
-            echo_err "Run: paseo daemon set-password"
-            echo_err "Then re-run: dev-stack.sh startup install -a paseo"
-            return 3
+            # Auto-hash PASEO_PASSWORD into the new config
+            local hash
+            hash="$(python3 -c "import bcrypt; print(bcrypt.hashpw(b'${PASEO_PASSWORD}', bcrypt.gensalt()).decode())")"
+            if [[ -n "$hash" ]]; then
+                python3 -c "
+import json
+cfg_path = '$PASEO_LIVE_CONFIG'
+with open(cfg_path) as f:
+    cfg = json.load(f)
+cfg.setdefault('daemon', {}).setdefault('auth', {})['password'] = '$hash'
+with open(cfg_path, 'w') as f:
+    json.dump(cfg, f, indent=2)
+    f.write('\n')
+"
+                echo_success "Password hash written to $PASEO_LIVE_CONFIG"
+            else
+                echo_err "Failed to generate bcrypt hash."
+                echo_err "Run: paseo daemon set-password"
+                return 3
+            fi
+        else
+            echo_warn "Paseo auth password not set. Run 'paseo daemon set-password' before starting the daemon."
         fi
-        echo_warn "Paseo auth password not set. Run 'paseo daemon set-password' before starting the daemon."
         return 0
     fi
     local tmp
@@ -573,43 +570,6 @@ PYEOF
         chmod 600 "$PASEO_LIVE_CONFIG"
         echo_success "Paseo config reconciled (listen converged; password/providers/runtime preserved)."
     fi
-    ensure_paseo_env_allowlist
-}
-
-ensure_paseo_env_allowlist() {
-    # The user unit must never load the whole secrets file (R28). It
-    # loads .env-common + .env-override + this generated allowlist file
-    # (0600) carrying only PASEO_PASSWORD. Regenerated when the secrets
-    # value changes; compare-before-write keeps it a no-op otherwise.
-    local secrets_val=""
-    if [[ -f "$PASEO_SECRETS_FILE" ]]; then
-        secrets_val="$(grep -E '^PASEO_PASSWORD=' "$PASEO_SECRETS_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || echo '')"
-    fi
-    if [[ "$DRY_RUN" == true ]]; then
-        dry_echo "reconcile $PASEO_ENV_FILE (PASEO_PASSWORD allowlist only, chmod 600)"
-        return 0
-    fi
-    local tmp
-    tmp="$(mktemp)"
-    trap 'rm -f "$tmp"' EXIT
-    {
-        printf '# Generated by dev-stack.sh (Paseo allowlist). Do not edit; set PASEO_PASSWORD in .env-secrets.\n'
-        if [[ -n "$secrets_val" ]]; then
-            printf 'PASEO_PASSWORD=%s\n' "$secrets_val"
-        else
-            printf '# PASEO_PASSWORD is unset in .env-secrets.\n'
-        fi
-    } >"$tmp"
-    chmod 600 "$tmp"
-    if [[ -f "$PASEO_ENV_FILE" ]] && cmp -s "$tmp" "$PASEO_ENV_FILE"; then
-        rm -f "$tmp"
-        trap - EXIT
-        return 0
-    fi
-    mv "$tmp" "$PASEO_ENV_FILE"
-    chmod 600 "$PASEO_ENV_FILE"
-    trap - EXIT
-    echo_info "Paseo env allowlist reconciled ($PASEO_ENV_FILE)."
 }
 
 paseo_effective_listen() {
@@ -626,9 +586,6 @@ paseo_effective_listen() {
 
 paseo_password_set() {
     [[ -n "${PASEO_PASSWORD:-}" ]] && return 0
-    if [[ -f "$PASEO_ENV_FILE" ]] && grep -qE '^PASEO_PASSWORD=.+' "$PASEO_ENV_FILE" 2>/dev/null; then
-        return 0
-    fi
     if [[ -f "$PASEO_SECRETS_FILE" ]] && grep -qE '^PASEO_PASSWORD=.+' "$PASEO_SECRETS_FILE" 2>/dev/null; then
         return 0
     fi
@@ -636,19 +593,18 @@ paseo_password_set() {
 }
 
 paseo_password_in_unit_env() {
-    # R28: systemd user units load PASEO_PASSWORD only from the
-    # EnvironmentFile (the .env-paseo allowlist file). The caller's
+    # The systemd user unit loads .env-secrets directly. The caller's
     # bash environment is irrelevant because systemd discards it.
     # This function checks only the file-based surface that the unit
     # actually loads.
-    if [[ -f "$PASEO_ENV_FILE" ]] && grep -qE '^PASEO_PASSWORD=.+' "$PASEO_ENV_FILE" 2>/dev/null; then
+    if [[ -f "$PASEO_SECRETS_FILE" ]] && grep -qE '^PASEO_PASSWORD=.+' "$PASEO_SECRETS_FILE" 2>/dev/null; then
         return 0
     fi
     return 1
 }
 
 require_paseo_password_for_remote() {
-    # Fail-closed (R28): a 0.0.0.0 bind without PASEO_PASSWORD refuses
+    # Fail-closed: a 0.0.0.0 bind without PASEO_PASSWORD refuses
     # with exit 3. No open remote daemon, ever.
     # $1 = "unit" when the managed systemd unit is involved: the unit
     # template hardcodes `--listen 0.0.0.0:6767`, so the password is
@@ -658,7 +614,7 @@ require_paseo_password_for_remote() {
     local mode="${1:-config}"
     if [[ "$mode" == "unit" ]]; then
         if ! paseo_password_in_unit_env; then
-            echo_err "Refusing to install/enable/start the Paseo unit without PASEO_PASSWORD in .env-paseo (fail-closed: the unit binds 0.0.0.0)."
+            echo_err "Refusing to install/enable/start the Paseo unit without PASEO_PASSWORD in .env-secrets (fail-closed: the unit binds 0.0.0.0)."
             echo_err "Remediation: set PASEO_PASSWORD in ~/.config/heypogi/.env-secrets, run 'dev-stack.sh install -a paseo', then retry."
             return 3
         fi
@@ -681,8 +637,8 @@ require_paseo_password_for_remote() {
 require_paseo_password_hash() {
     # When PASEO_PASSWORD is set, config.json must contain the
     # corresponding bcrypt hash (daemon.auth.password). Without it
-    # the daemon starts but rejects every connection. Blocks with
-    # exit 3 and tells the user exactly what to run.
+    # the daemon starts but rejects every connection. Auto-hashes
+    # and writes the hash if missing.
     if ! paseo_password_set; then
         return 0  # no password configured — nothing to hash-check
     fi
@@ -693,11 +649,31 @@ require_paseo_password_hash() {
     if python3 -c "import json; c=json.load(open('$paseo_cfg')); assert c.get('daemon',{}).get('auth',{}).get('password','')" 2>/dev/null; then
         return 0
     fi
-    echo_err "PASEO_PASSWORD is set but no password hash exists in $paseo_cfg."
-    echo_err "The daemon will start but reject all connections."
-    echo_err "Run: paseo daemon set-password"
-    echo_err "Then restart the daemon: systemctl --user restart paseo.service (or re-run bootstrap)."
-    return 3
+    # Hash missing — auto-generate from PASEO_PASSWORD
+    echo_info "PASEO_PASSWORD is set but no hash in config; auto-hashing..."
+    local hash
+    hash="$(python3 -c "import bcrypt; print(bcrypt.hashpw(b'${PASEO_PASSWORD}', bcrypt.gensalt()).decode())")"
+    if [[ -z "$hash" ]]; then
+        echo_err "Failed to generate bcrypt hash."
+        echo_err "Run: paseo daemon set-password"
+        return 3
+    fi
+    if [[ "$DRY_RUN" == true ]]; then
+        dry_echo "write daemon.auth.password hash to $paseo_cfg"
+        return 0
+    fi
+    python3 -c "
+import json
+cfg_path = '$paseo_cfg'
+with open(cfg_path) as f:
+    cfg = json.load(f)
+cfg.setdefault('daemon', {}).setdefault('auth', {})['password'] = '$hash'
+with open(cfg_path, 'w') as f:
+    json.dump(cfg, f, indent=2)
+    f.write('\n')
+"
+    echo_success "Password hash written to $paseo_cfg"
+    return 0
 }
 
 migrate_legacy_system_unit() {
@@ -1131,10 +1107,9 @@ do_fix() {
 
 # --- Startup (systemd user unit; never the system unit) ---
 startup_ensure_allowlist_lines() {
-    # Reconcile the unit's EnvironmentFile allowlist (R28): common +
-    # override + generated .env-paseo. Removes any legacy line loading
-    # the whole .env-secrets file. Atomic: reads, merges in memory,
-    # writes to mktemp, cmp before mv (no check-then-sed race).
+    # Reconcile the unit's EnvironmentFile lines: common + override +
+    # .env-secrets. Atomic: reads, merges in memory, writes to mktemp,
+    # cmp before mv (no check-then-sed race).
     # Returns 0 when converged, 1 when changed.
     local target="$1"
     local changed=0
@@ -1143,12 +1118,11 @@ startup_ensure_allowlist_lines() {
         local need_add=0 need_rm=0
         for line in "EnvironmentFile=-%h/.config/heypogi/.env-common" \
                     "EnvironmentFile=-%h/.config/heypogi/.env-override" \
-                    "EnvironmentFile=-%h/.config/heypogi/.env-paseo"; do
+                    "EnvironmentFile=-%h/.config/heypogi/.env-secrets"; do
             grep -qF "$line" "$target" 2>/dev/null || need_add=1
         done
-        grep -qF "EnvironmentFile=-%h/.config/heypogi/.env-secrets" "$target" 2>/dev/null && need_rm=1
-        if [[ "$need_add" -eq 1 || "$need_rm" -eq 1 ]]; then
-            dry_echo "reconcile EnvironmentFile allowlist in $target (atomic rewrite)"
+        if [[ "$need_add" -eq 1 ]]; then
+            dry_echo "reconcile EnvironmentFile lines in $target (atomic rewrite)"
         fi
         return 0
     fi
@@ -1157,44 +1131,43 @@ startup_ensure_allowlist_lines() {
     tmp_target="$(mktemp "${target}.tmp.XXXXXX")"
     trap 'rm -f "$tmp_target"' EXIT
 
-    # Build the desired unit file content: keep all lines except the
-    # legacy whole-secrets line, and ensure the three allowlist lines
-    # are present before ExecStart=. Track whether any allowlist line
-    # was absent from the SOURCE (target) to detect drift.
-    local allowlist_inserted=0
+    # Build the desired unit file content: keep all lines except any
+    # legacy .env-paseo lines, and ensure the three EnvironmentFile
+    # lines are present before ExecStart=.
+    local lines_inserted=0
     local _el_common="EnvironmentFile=-%h/.config/heypogi/.env-common"
     local _el_override="EnvironmentFile=-%h/.config/heypogi/.env-override"
-    local _el_paseo="EnvironmentFile=-%h/.config/heypogi/.env-paseo"
+    local _el_secrets="EnvironmentFile=-%h/.config/heypogi/.env-secrets"
     while IFS= read -r src_line || [[ -n "$src_line" ]]; do
-        # Skip legacy whole-secrets line
-        if [[ "$src_line" =~ ^EnvironmentFile=-.*\.config/heypogi/\.env-secrets$ ]]; then
+        # Skip legacy .env-paseo line
+        if [[ "$src_line" =~ ^EnvironmentFile=-.*\.config/heypogi/\.env-paseo$ ]]; then
             changed=1
             continue
         fi
-        # Track if any allowlist line is missing from the source
+        # Track if any desired line is missing from the source
         [[ "$src_line" == "$_el_common" ]] && _el_common=""
         [[ "$src_line" == "$_el_override" ]] && _el_override=""
-        [[ "$src_line" == "$_el_paseo" ]] && _el_paseo=""
-        # Insert allowlist lines before the first ExecStart=
-        if [[ "$allowlist_inserted" -eq 0 && "$src_line" =~ ^ExecStart= ]]; then
+        [[ "$src_line" == "$_el_secrets" ]] && _el_secrets=""
+        # Insert desired lines before the first ExecStart=
+        if [[ "$lines_inserted" -eq 0 && "$src_line" =~ ^ExecStart= ]]; then
             printf '%s\n' "EnvironmentFile=-%h/.config/heypogi/.env-common" >>"$tmp_target"
             printf '%s\n' "EnvironmentFile=-%h/.config/heypogi/.env-override" >>"$tmp_target"
-            printf '%s\n' "EnvironmentFile=-%h/.config/heypogi/.env-paseo" >>"$tmp_target"
-            allowlist_inserted=1
+            printf '%s\n' "EnvironmentFile=-%h/.config/heypogi/.env-secrets" >>"$tmp_target"
+            lines_inserted=1
         fi
         printf '%s\n' "$src_line" >>"$tmp_target"
     done <"$target"
 
     # Handle edge case: no ExecStart= found, append at end
-    if [[ "$allowlist_inserted" -eq 0 ]]; then
+    if [[ "$lines_inserted" -eq 0 ]]; then
         printf '%s\n' "EnvironmentFile=-%h/.config/heypogi/.env-common" >>"$tmp_target"
         printf '%s\n' "EnvironmentFile=-%h/.config/heypogi/.env-override" >>"$tmp_target"
-        printf '%s\n' "EnvironmentFile=-%h/.config/heypogi/.env-paseo" >>"$tmp_target"
-        allowlist_inserted=1
+        printf '%s\n' "EnvironmentFile=-%h/.config/heypogi/.env-secrets" >>"$tmp_target"
+        lines_inserted=1
     fi
 
-    # If any allowlist line was absent from the source, mark changed
-    [[ -n "$_el_common" || -n "$_el_override" || -n "$_el_paseo" ]] && changed=1
+    # If any desired line was absent from the source, mark changed
+    [[ -n "$_el_common" || -n "$_el_override" || -n "$_el_secrets" ]] && changed=1
 
     if [[ "$changed" -eq 0 ]]; then
         rm -f "$tmp_target"
@@ -1253,7 +1226,6 @@ do_startup() {
                             startup_rc=1
                             continue
                         fi
-                        ensure_paseo_env_allowlist || { startup_rc=$?; continue; }
                         if [[ -f "$SERVICE_FILE" ]]; then
                             if startup_ensure_allowlist_lines "$SERVICE_FILE"; then
                                 if [[ "$DRY_RUN" == true ]]; then
@@ -1264,10 +1236,10 @@ do_startup() {
                             else
                                 if [[ "$DRY_RUN" != true ]]; then
                                     systemctl --user daemon-reload
-                                    echo_success "Paseo user service updated (allowlist, no whole-secrets)"
+                                    echo_success "Paseo user service already converged"
                                 else
                                     dry_echo "systemctl --user daemon-reload"
-                                    dry_echo "unit $SERVICE_FILE would be updated (allowlist, no whole-secrets)"
+                                    dry_echo "unit $SERVICE_FILE would be updated (.env-secrets loaded)"
                                 fi
                             fi
                         elif [[ -f "$TEMPLATE" ]]; then
@@ -1298,13 +1270,12 @@ do_startup() {
                             else
                                 if [[ "$DRY_RUN" != true ]]; then
                                     systemctl --user daemon-reload
-                                    echo_success "Paseo user service fixed (allowlist, no whole-secrets)"
+                                    echo_success "Paseo user service fixed (.env-secrets loaded)"
                                 else
                                     dry_echo "systemctl --user daemon-reload"
-                                    dry_echo "unit $SERVICE_FILE would be fixed (allowlist, no whole-secrets)"
+                                    dry_echo "unit $SERVICE_FILE would be fixed (.env-secrets loaded)"
                                 fi
                             fi
-                            ensure_paseo_env_allowlist || startup_rc=$?
                         else
                             echo_err "paseo.service not found at $SERVICE_FILE"
                             echo_err "Remediation: run 'dev-stack.sh startup install -a paseo'."
@@ -1412,7 +1383,7 @@ Set one before starting it:
 
 Paseo will not bind to 0.0.0.0 without PASEO_PASSWORD set (fail-closed).
 Set it in ~/.config/heypogi/.env-secrets, then run:
-  ./dev-stack.sh install -a paseo   # seeds ~/.config/heypogi/.env-paseo
+  ./dev-stack.sh install -a paseo   # loads ~/.config/heypogi/.env-secrets into the unit
 EOF
     return 0
 }
