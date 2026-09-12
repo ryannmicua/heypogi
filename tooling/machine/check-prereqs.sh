@@ -182,22 +182,30 @@ install_nvm() {
 }
 
 install_node_lts() {
-    # Install Node.js LTS via nvm if no suitable Node is present.
-    # Sets the default alias so future shells pick it up.
-    #
-    # Uses 'lts/*' (latest LTS) rather than a pinned version to stay
-    # current without manual updates. The 'default' alias ensures new
-    # shells automatically use this version.
+    # Install Node.js LTS via nvm. We own Node -- any system-level
+    # node (apt, nodesource, etc.) is ignored. Idempotent: skips only
+    # if nvm already has a default alias pointing at a managed version
+    # that meets the minimum.
     source_nvm || {
         log_err "nvm not available; cannot install Node.js."
         return 3
     }
-    # Check if current node meets the minimum version.
-    local current_major
-    current_major="$(node_major)"
-    if [[ "$current_major" =~ ^[0-9]+$ ]] && [[ "$current_major" -ge "$NODE_MIN_MAJOR" ]]; then
-        log_ok "Node.js $(node --version) already meets minimum (>= $NODE_MIN_MAJOR)"
-        return 0
+    # Check if nvm already has a managed default that meets the minimum.
+    local alias_file="$NVM_DIR/alias/default"
+    if [[ -f "$alias_file" ]]; then
+        local alias_ver
+        alias_ver="$(cat "$alias_file")"
+        local nvm_bin="$NVM_DIR/versions/node/$alias_ver/bin"
+        if [[ -d "$nvm_bin" ]] && [[ -x "$nvm_bin/node" ]]; then
+            local ver
+            ver="$("$nvm_bin/node" --version 2>/dev/null || echo "")"
+            ver="${ver#v}"
+            local major="${ver%%.*}"
+            if [[ "$major" =~ ^[0-9]+$ ]] && [[ "$major" -ge "$NODE_MIN_MAJOR" ]]; then
+                log_ok "Node.js v$ver already installed via nvm (default: $alias_ver, >= $NODE_MIN_MAJOR)"
+                return 0
+            fi
+        fi
     fi
     if [[ "$DRY_RUN" == true ]]; then
         log_dry "nvm install --lts && nvm alias default '$NODE_LTS_ALIAS'"
