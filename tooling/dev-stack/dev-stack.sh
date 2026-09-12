@@ -505,8 +505,15 @@ seed_paseo_config() {
         echo_info "Seeding Paseo config from template (no auth.password key: set it with 'paseo daemon set-password')..."
         cp "$template" "$PASEO_LIVE_CONFIG"
         chmod 600 "$PASEO_LIVE_CONFIG"
-        echo_warn "Paseo auth password not set. Run 'paseo daemon set-password' after provisioning."
         ensure_paseo_env_allowlist || return $?
+        if paseo_password_set; then
+            echo_err "PASEO_PASSWORD is set but the config has no password hash."
+            echo_err "The daemon will start but reject all connections."
+            echo_err "Run: paseo daemon set-password"
+            echo_err "Then re-run: dev-stack.sh startup install -a paseo"
+            return 3
+        fi
+        echo_warn "Paseo auth password not set. Run 'paseo daemon set-password' before starting the daemon."
         return 0
     fi
     local tmp
@@ -669,6 +676,28 @@ require_paseo_password_for_remote() {
             ;;
     esac
     return 0
+}
+
+require_paseo_password_hash() {
+    # When PASEO_PASSWORD is set, config.json must contain the
+    # corresponding bcrypt hash (daemon.auth.password). Without it
+    # the daemon starts but rejects every connection. Blocks with
+    # exit 3 and tells the user exactly what to run.
+    if ! paseo_password_set; then
+        return 0  # no password configured — nothing to hash-check
+    fi
+    local paseo_cfg="$HOME/.paseo/config.json"
+    if [[ ! -f "$paseo_cfg" ]]; then
+        return 0  # config doesn't exist yet — seed will handle it
+    fi
+    if python3 -c "import json; c=json.load(open('$paseo_cfg')); assert c.get('daemon',{}).get('auth',{}).get('password','')" 2>/dev/null; then
+        return 0
+    fi
+    echo_err "PASEO_PASSWORD is set but no password hash exists in $paseo_cfg."
+    echo_err "The daemon will start but reject all connections."
+    echo_err "Run: paseo daemon set-password"
+    echo_err "Then restart the daemon: systemctl --user restart paseo.service (or re-run bootstrap)."
+    return 3
 }
 
 migrate_legacy_system_unit() {
@@ -916,6 +945,10 @@ do_start_app() {
             fi
             if ! check_port "$OPENCHAMBER_PORT"; then
                 echo_info "Starting OpenChamber..."
+                # Export OPENCHAMBER_UI_PASSWORD so the child process inherits it.
+                # The env files use KEY=value without export; nohup won't see
+                # non-exported variables.
+                [[ -n "${OPENCHAMBER_UI_PASSWORD:-}" ]] && export OPENCHAMBER_UI_PASSWORD
                 nohup openchamber serve --host 0.0.0.0 --port "$OPENCHAMBER_PORT" > /dev/null 2>&1 &
                 sleep 2
                 if check_port "$OPENCHAMBER_PORT"; then
@@ -944,6 +977,7 @@ do_start_app() {
             else
                 require_paseo_password_for_remote config || return $?
             fi
+            require_paseo_password_hash || return $?
             if ! check_port "$PASEO_PORT"; then
                 echo_info "Starting Paseo daemon..."
                 if systemctl --user list-unit-files paseo.service &>/dev/null 2>&1; then
