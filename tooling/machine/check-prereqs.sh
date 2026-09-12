@@ -222,6 +222,15 @@ DRIFT=0
 BLOCKED=0
 BLOCK_MSGS=()
 
+check_nvm() {
+    if [[ -d "$NVM_DIR" ]]; then
+        log_ok "nvm present: $NVM_DIR"
+    else
+        log_warn "nvm missing. Remediation: bootstrap install (nvm will be installed automatically)."
+        DRIFT=1
+    fi
+}
+
 check_node() {
     if ! command -v node >/dev/null 2>&1; then
         log_err "Node.js not found."
@@ -341,6 +350,7 @@ install_uv() {
 do_status() {
     DRIFT=0; BLOCKED=0; BLOCK_MSGS=()
     log_info "Checking machine prerequisites..."
+    check_nvm
     check_node
     check_npm
     check_bin_present "curl" "curl" || true
