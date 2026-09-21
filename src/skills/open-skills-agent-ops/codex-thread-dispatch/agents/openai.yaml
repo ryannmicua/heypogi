@@ -1,0 +1,7 @@
+interface:
+  display_name: "Codex Thread Dispatch"
+  short_description: "Hand off bounded work to a Codex task."
+  default_prompt: "Use $codex-thread-dispatch to hand this bounded task to a separate Codex session."
+
+policy:
+  allow_implicit_invocation: true
