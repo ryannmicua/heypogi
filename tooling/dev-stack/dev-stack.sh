@@ -116,6 +116,19 @@ check_port() {
     ss -tlnp 2>/dev/null | grep -q ":$port " && return 0 || return 1
 }
 
+wait_for_port() {
+    # Bounded readiness poll: return 0 as soon as the port is listening,
+    # 1 if it does not come up within the timeout. Replaces fixed sleeps
+    # that race slower starters and report a false failure.
+    local port="$1" timeout="${2:-15}" waited=0
+    while (( waited < timeout )); do
+        check_port "$port" && return 0
+        sleep 1
+        (( waited++ )) || true
+    done
+    return 1
+}
+
 get_listening_pid() {
     local port="$1"
     ss -tlnp 2>/dev/null | grep ":$port " | grep -oP 'pid=\K[0-9]+' | head -1 || echo ""
@@ -385,18 +398,6 @@ collect_status() {
         fi
         add_check "Paseo" "Health" "$(test_health "http://localhost:$PASEO_PORT/api/health" && echo true || echo false)" \
             "http://localhost:$PASEO_PORT/api/health"
-
-        # --web-ui is a runtime flag on current Paseo, not a persisted config
-        # key (older versions had features.webUi.enabled in config.json;
-        # that key no longer exists on 0.4.0+). The socket-listening process
-        # itself renames its own cmdline (e.g. to "Paseo Daemon" via
-        # process.title), losing the flag, so scan all processes for the
-        # launcher that still has it rather than trusting one specific pid.
-        if ps -eo args= 2>/dev/null | grep -q -- '--web-ui'; then
-            add_check "Paseo" "Web UI enabled" "true" "daemon launched with --web-ui"
-        else
-            add_check "Paseo" "Web UI enabled" "false" "no paseo process found with --web-ui"
-        fi
     fi
     
     # Paseo systemd USER service (userspace - never the system unit)
@@ -426,8 +427,13 @@ collect_status() {
         listen_ok=$(grep -q '"listen".*"0\.0\.0\.0:'"$PASEO_PORT" "$paseo_cfg" 2>/dev/null && echo true || echo false)
         add_check "Paseo" "Config listen 0.0.0.0" "$listen_ok" "$(if [[ "$listen_ok" == "true" ]]; then echo "daemon.listen = 0.0.0.0:$PASEO_PORT"; else echo "daemon.listen is not 0.0.0.0:$PASEO_PORT"; fi)"
 
-        # (Web UI enabled is checked above from the running process, not
-        # here - current Paseo has no persisted features.webUi config key.)
+        # Web UI is persisted config (features.webUi.enabled); the daemon no
+        # longer accepts a --web-ui runtime flag on 'daemon start', so read
+        # intended state from the config rather than from a process cmdline.
+        local webui_ok
+        webui_ok=$(python3 -c "import json,sys; c=json.load(open(sys.argv[1])); print('true' if c.get('features',{}).get('webUi',{}).get('enabled') else 'false')" "$paseo_cfg" 2>/dev/null || echo false)
+        add_check "Paseo" "Web UI enabled" "$webui_ok" \
+            "$(if [[ "$webui_ok" == "true" ]]; then echo "features.webUi.enabled = true"; else echo "features.webUi.enabled is not true; run 'fix -a paseo'"; fi)"
 
         # Check password is set (non-empty)
         if python3 -c "import json; c=json.load(open('$paseo_cfg')); assert c.get('daemon',{}).get('auth',{}).get('password','')" 2>/dev/null; then
@@ -926,8 +932,7 @@ do_start_app() {
                 # non-exported variables.
                 [[ -n "${OPENCHAMBER_UI_PASSWORD:-}" ]] && export OPENCHAMBER_UI_PASSWORD
                 nohup openchamber serve --host 0.0.0.0 --port "$OPENCHAMBER_PORT" > /dev/null 2>&1 &
-                sleep 2
-                if check_port "$OPENCHAMBER_PORT"; then
+                if wait_for_port "$OPENCHAMBER_PORT" 15; then
                     echo_success "OpenChamber started"
                 else
                     echo_warn "OpenChamber may have failed to start"
@@ -960,9 +965,8 @@ do_start_app() {
                     systemctl --user start paseo.service || true
                 else
                     nohup paseo daemon start > /dev/null 2>&1 &
-                    sleep 2
                 fi
-                if check_port "$PASEO_PORT"; then
+                if wait_for_port "$PASEO_PORT" 20; then
                     echo_success "Paseo daemon started"
                 else
                     echo_warn "Paseo daemon may have failed to start"

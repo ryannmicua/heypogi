@@ -21,7 +21,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=%h
-ExecStart=%h/.local/node-bin/paseo daemon start --listen 0.0.0.0:6767 --web-ui --foreground
+ExecStart=%h/.local/node-bin/paseo daemon run
 Restart=always
 RestartSec=10
 Environment=NODE_ENV=production
