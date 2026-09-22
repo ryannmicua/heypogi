@@ -456,6 +456,17 @@ collect_status() {
         else
             add_check "Paseo" "Unit loads .env-secrets" "false" ".env-secrets line missing; run 'startup fix -a paseo'"
         fi
+
+        # Unit drift: compare installed unit against the repo template
+        local template="$SCRIPT_DIR/paseo.service"
+        if [[ -f "$template" ]]; then
+            if check_unit_divergence "$user_unit" "$template"; then
+                add_check "Paseo" "Unit matches repo" "true" "installed unit matches repo template"
+            else
+                add_warn "Paseo" "Unit diverged from repo" \
+                    "installed unit differs from repo template; run 'startup fix -a paseo' to sync"
+            fi
+        fi
     fi
 }
 
@@ -1096,6 +1107,24 @@ do_fix() {
         # Reconcile Paseo config additively (password-preserving) instead
         # of sed-rewriting the live file.
         seed_paseo_config || fix_rc=$?
+        # Reconcile systemd unit drift (sync from repo template if diverged).
+        local fix_service_file="$HOME/.config/systemd/user/paseo.service"
+        local fix_template="$SCRIPT_DIR/paseo.service"
+        if [[ -f "$fix_service_file" && -f "$fix_template" ]]; then
+            if ! check_unit_divergence "$fix_service_file" "$fix_template" 2>/dev/null; then
+                if [[ "$FORCE" == true ]]; then
+                    sync_unit_from_template "$fix_service_file" "$fix_template" || fix_rc=$?
+                    echo_success "Paseo unit synced from repo template"
+                elif [[ -t 0 ]]; then
+                    printf '%s' "Paseo unit diverged from repo template. Update? [Y/n] " >&2
+                    read -r choice
+                    if [[ ! "$choice" =~ ^[Nn] ]]; then
+                        sync_unit_from_template "$fix_service_file" "$fix_template" || fix_rc=$?
+                        echo_success "Paseo unit synced from repo template"
+                    fi
+                fi
+            fi
+        fi
     fi
     if [[ "$fix_rc" -ne 0 ]]; then
         echo_err "Fix converged with failures (see above)."
@@ -1184,6 +1213,41 @@ startup_ensure_allowlist_lines() {
     return 1
 }
 
+# --- Unit drift detection ---
+# Compare the installed systemd unit against the repo template, ignoring
+# comment lines and blank lines.  Returns 0 when identical (converged),
+# 1 when diverged.  Sets UNIT_DIFF for callers that want the diff.
+check_unit_divergence() {
+    local installed="$1" template="$2"
+    local filtered_installed filtered_template
+    filtered_installed=$(grep -v '^\s*#' "$installed" | grep -v '^\s*$')
+    filtered_template=$(grep -v '^\s*#' "$template" | grep -v '^\s*$')
+    if [[ "$filtered_installed" == "$filtered_template" ]]; then
+        return 0
+    fi
+    UNIT_DIFF=$(diff --unified <(grep -v '^\s*#' "$installed" | grep -v '^\s*$') \
+                              <(grep -v '^\s*#' "$template" | grep -v '^\s*$') || true)
+    return 1
+}
+
+# Copy the repo template to the installed location, then reconcile the
+# EnvironmentFile allowlist.  Preserves .env-secrets loading.  Returns 0
+# on success, 1 on failure.
+sync_unit_from_template() {
+    local installed="$1" template="$2"
+    if [[ "$DRY_RUN" == true ]]; then
+        dry_echo "overwrite $installed from repo template $template"
+        dry_echo "reconcile EnvironmentFile lines + systemctl --user daemon-reload"
+        return 0
+    fi
+    mkdir -p "$(dirname "$installed")"
+    cp "$template" "$installed"
+    chmod 600 "$installed"
+    startup_ensure_allowlist_lines "$installed" || true
+    systemctl --user daemon-reload
+    return 0
+}
+
 do_startup() {
     local verb="$1"
     local apps
@@ -1231,19 +1295,41 @@ do_startup() {
                             continue
                         fi
                         if [[ -f "$SERVICE_FILE" ]]; then
-                            if startup_ensure_allowlist_lines "$SERVICE_FILE"; then
-                                if [[ "$DRY_RUN" == true ]]; then
-                                    dry_echo "unit $SERVICE_FILE already converged (no writes)"
+                            # Check full unit drift first, then reconcile env files.
+                            if check_unit_divergence "$SERVICE_FILE" "$TEMPLATE" 2>/dev/null; then
+                                # No structural drift - still ensure env lines are present.
+                                if startup_ensure_allowlist_lines "$SERVICE_FILE"; then
+                                    if [[ "$DRY_RUN" == true ]]; then
+                                        dry_echo "unit $SERVICE_FILE already converged (no writes)"
+                                    else
+                                        echo_success "Paseo user service already converged"
+                                    fi
                                 else
-                                    echo_success "Paseo user service already converged"
+                                    if [[ "$DRY_RUN" != true ]]; then
+                                        systemctl --user daemon-reload
+                                        echo_success "Paseo user service already converged"
+                                    else
+                                        dry_echo "systemctl --user daemon-reload"
+                                        dry_echo "unit $SERVICE_FILE would be updated (.env-secrets loaded)"
+                                    fi
                                 fi
                             else
-                                if [[ "$DRY_RUN" != true ]]; then
-                                    systemctl --user daemon-reload
-                                    echo_success "Paseo user service already converged"
+                                # Unit diverged from repo template - sync it.
+                                if [[ "$FORCE" == true ]]; then
+                                    sync_unit_from_template "$SERVICE_FILE" "$TEMPLATE" || { startup_rc=$?; continue; }
+                                    echo_success "Paseo user service synced from repo template"
+                                elif [[ -t 0 ]]; then
+                                    printf '%s' "Paseo unit diverged from repo template. Update installed unit? [Y/n] " >&2
+                                    read -r choice
+                                    if [[ ! "$choice" =~ ^[Nn] ]]; then
+                                        sync_unit_from_template "$SERVICE_FILE" "$TEMPLATE" || { startup_rc=$?; continue; }
+                                        echo_success "Paseo user service synced from repo template"
+                                    else
+                                        echo_info "Skipped. Unit remains diverged."
+                                    fi
                                 else
-                                    dry_echo "systemctl --user daemon-reload"
-                                    dry_echo "unit $SERVICE_FILE would be updated (.env-secrets loaded)"
+                                    echo_err "Paseo unit diverged from repo template. Re-run with -f/--force to sync."
+                                    startup_rc=1
                                 fi
                             fi
                         elif [[ -f "$TEMPLATE" ]]; then
@@ -1265,19 +1351,41 @@ do_startup() {
                         ;;
                     fix)
                         if [[ -f "$SERVICE_FILE" ]]; then
-                            if startup_ensure_allowlist_lines "$SERVICE_FILE"; then
-                                if [[ "$DRY_RUN" == true ]]; then
-                                    dry_echo "unit $SERVICE_FILE already converged (no writes)"
+                            # Check full unit drift first, then reconcile env files.
+                            if check_unit_divergence "$SERVICE_FILE" "$TEMPLATE" 2>/dev/null; then
+                                # No structural drift - still ensure env lines are present.
+                                if startup_ensure_allowlist_lines "$SERVICE_FILE"; then
+                                    if [[ "$DRY_RUN" == true ]]; then
+                                        dry_echo "unit $SERVICE_FILE already converged (no writes)"
+                                    else
+                                        echo_success "Paseo user service already converged"
+                                    fi
                                 else
-                                    echo_success "Paseo user service already converged"
+                                    if [[ "$DRY_RUN" != true ]]; then
+                                        systemctl --user daemon-reload
+                                        echo_success "Paseo user service fixed (.env-secrets loaded)"
+                                    else
+                                        dry_echo "systemctl --user daemon-reload"
+                                        dry_echo "unit $SERVICE_FILE would be fixed (.env-secrets loaded)"
+                                    fi
                                 fi
                             else
-                                if [[ "$DRY_RUN" != true ]]; then
-                                    systemctl --user daemon-reload
-                                    echo_success "Paseo user service fixed (.env-secrets loaded)"
+                                # Unit diverged from repo template - sync it.
+                                if [[ "$FORCE" == true ]]; then
+                                    sync_unit_from_template "$SERVICE_FILE" "$TEMPLATE" || { startup_rc=$?; continue; }
+                                    echo_success "Paseo user service synced from repo template"
+                                elif [[ -t 0 ]]; then
+                                    printf '%s' "Paseo unit diverged from repo template. Update installed unit? [Y/n] " >&2
+                                    read -r choice
+                                    if [[ ! "$choice" =~ ^[Nn] ]]; then
+                                        sync_unit_from_template "$SERVICE_FILE" "$TEMPLATE" || { startup_rc=$?; continue; }
+                                        echo_success "Paseo user service synced from repo template"
+                                    else
+                                        echo_info "Skipped. Unit remains diverged."
+                                    fi
                                 else
-                                    dry_echo "systemctl --user daemon-reload"
-                                    dry_echo "unit $SERVICE_FILE would be fixed (.env-secrets loaded)"
+                                    echo_err "Paseo unit diverged from repo template. Re-run with -f/--force to sync."
+                                    startup_rc=1
                                 fi
                             fi
                         else
