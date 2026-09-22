@@ -23,6 +23,16 @@ All three are installed as npm CLIs. The script has a strict separation:
 powershell -NoProfile -ExecutionPolicy Bypass -File tooling/dev-stack/dev-stack.ps1 [command]
 ```
 
+The repository wrapper can be used from `cmd.exe`:
+
+```bat
+tooling\bin\heypogi-dev-stack.cmd update -q
+```
+
+This updates all three tools and runs the normal ensure/verify steps without
+confirmation prompts. `-q` is the short alias for `-Quiet`; warnings and
+errors are still reported.
+
 | Command | What it does |
 |---------|--------------|
 | `install` | Explicit full setup: detects missing/outdated tools, runs the installers (`opencode-ctl.ps1`, `openchamber-ctl.ps1`, `paseo-ctl.ps1`), restarts daemons, then ensures autostart + config (Run key, scheduled task, `0.0.0.0` listen, web UI, password reminders) and verifies. Idempotent - safe to re-run. |
@@ -48,8 +58,8 @@ normal way) does **not** translate `--` to `-`, and `-App opencode` will
 fail with `A positional parameter cannot be found that accepts argument
 'opencode'`.
 
-All commands accept `-Quiet` (suppress prompts/output) and `-Force` (skip
-confirmation prompts). `install` and `fix` prompt before any destructive
+All commands accept `-Quiet` (or its short alias `-q`) to suppress
+prompts/output and `-Force` to skip confirmation prompts. `install` and `fix` prompt before any destructive
 action (stopping daemons, editing config files) unless `-Force` is given.
 `-Quiet` also auto-accepts those same confirmation prompts (so
 `install -Quiet` runs unattended too), but only for non-destructive config

@@ -5,6 +5,7 @@ param(
   [Parameter(Position = 1)]
   [string]$SubCommand,
   [string]$App,
+  [Alias("q")]
   [switch]$Quiet,
   [switch]$Force,
   [switch]$WipeConfig,
@@ -704,13 +705,13 @@ function Invoke-Ensure {
   # openchamber: not running -> start
   if (-not (Get-ListeningPid -Port $OpenChamberPort)) {
     Write-Host "Starting OpenChamber..." -ForegroundColor Yellow
-    Safe-Invoke -What "Starting OpenChamber" -Body { & (Join-Path $PSScriptRoot "openchamber-ctl.ps1") start }
+    Safe-Invoke -What "Starting OpenChamber" -Body { & (Join-Path $PSScriptRoot "openchamber-ctl.ps1") start -Quiet:$Quiet -Force:$Force }
   }
   # openchamber autostart -> configure re-registers Run key + wrappers
   # (skipped when DEV_STACK_AUTOSTART=0 - this machine doesn't want it)
   if ($autostartWanted -and -not (Get-RunKeyValue -Name $OpenChamberRunKey)) {
     Write-Host "Registering OpenChamber autostart..." -ForegroundColor Yellow
-    Safe-Invoke -What "Registering OpenChamber autostart" -Body { & (Join-Path $PSScriptRoot "openchamber-ctl.ps1") configure }
+    Safe-Invoke -What "Registering OpenChamber autostart" -Body { & (Join-Path $PSScriptRoot "openchamber-ctl.ps1") configure -Quiet:$Quiet -Force:$Force }
   }
   # openchamber settings host -> 0.0.0.0 (targeted edit, prompted unless -Force)
   $settingsPath = Join-Path $env:USERPROFILE ".config\openchamber\settings.json"
@@ -724,7 +725,7 @@ function Invoke-Ensure {
       $fixed = $raw -replace '"host"\s*:\s*"[^"]*"', '"host": "0.0.0.0"'
       [System.IO.File]::WriteAllText($settingsPath, $fixed, (New-Object System.Text.UTF8Encoding $false))
       Write-Host "Set openchamber host to 0.0.0.0. Re-running configure..." -ForegroundColor Yellow
-      Safe-Invoke -What "Re-running OpenChamber configure" -Body { & (Join-Path $PSScriptRoot "openchamber-ctl.ps1") configure }
+      Safe-Invoke -What "Re-running OpenChamber configure" -Body { & (Join-Path $PSScriptRoot "openchamber-ctl.ps1") configure -Quiet:$Quiet -Force:$Force }
     }
   }
   # openchamber UI password reminder
@@ -1225,7 +1226,7 @@ function Show-Help {
   Write-Host "Options:" -ForegroundColor Cyan
   Write-Host "  -Command <cmd>  Command to run (same as the positional argument)."
   Write-Host "  -App <app>      App to target for 'startup'/'uninstall'/status/start/stop."
-  Write-Host "  -Quiet          Skip the npm latest-version lookups in 'status'; on install/fix,"
+  Write-Host "  -Quiet, -q      Skip the npm latest-version lookups in 'status'; on install/fix,"
   Write-Host "                  also auto-accept config-fix confirmation prompts (like -Force,"
   Write-Host "                  but without forcing anything destructive)."
   Write-Host "  -Force          Apply config fixes / skip confirmations without prompting."
@@ -1252,6 +1253,7 @@ function Show-Help {
   Write-Host "  .\$exe fix              # fix whatever is broken"
   Write-Host "  .\$exe install -Force   # install/update everything, no prompts"
   Write-Host "  .\$exe install -Quiet   # same, no prompts, plus quieter output"
+  Write-Host "  tooling\bin\heypogi-dev-stack.cmd update -q   # update everything, no prompts"
   Write-Host "  .\$exe status -Quiet    # offline-friendly status check"
   Write-Host "  .\$exe update -App opencode -Force   # only update OpenCode"
   Write-Host "  .\$exe fix -App paseo-cli             # only fix Paseo's runtime state"
