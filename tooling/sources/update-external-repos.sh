@@ -98,7 +98,7 @@ log "=== Starting external repo update ==="
 
 FAILED=0
 FAILED_NAMES=()
-for script in clone-ce-source.sh clone-knowledge-source.sh clone-opencode-source.sh; do
+for script in clone-ce-source.sh clone-opencode-source.sh; do
     if bash "$REPO_DIR/tooling/sources/$script" "${CHILD_ARGS[@]}" 2>&1; then
         log "OK: $script"
     else

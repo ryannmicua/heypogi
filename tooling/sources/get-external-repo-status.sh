@@ -10,7 +10,7 @@ Reports staleness of the external repo clones.
 Usage:
   bash tooling/sources/get-external-repo-status.sh [--max-age-days <1-3650>]
 
-Checks compound-engineering, compound-knowledge, and opencode against
+Checks compound-engineering and opencode against
 external/.repo-update-status.json. Exits 1 if any is missing a record or
 older than --max-age-days (default 7).
 EOF
@@ -39,7 +39,6 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd "${script_dir}/../.." && pwd -P)"
 status_path="${repo_root}/external/.repo-update-status.json"
 repositories="compound-engineering
-compound-knowledge
 opencode"
 
 if [[ ! -f "${status_path}" ]]; then

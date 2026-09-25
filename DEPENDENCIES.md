@@ -43,7 +43,6 @@ Cloned into `external/` for reference by OpenCode subagents:
 |---|---|---|
 | **opencode** | `https://github.com/anomalyco/opencode.git` | `@opencode` |
 | **compound-engineering** | `https://github.com/EveryInc/compound-engineering-plugin.git` | `@ce`, skills installer |
-| **compound-knowledge** | `https://github.com/EveryInc/compound-knowledge-plugin.git` | Skills installer |
 
 ## Environment variables
 

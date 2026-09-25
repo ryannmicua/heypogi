@@ -311,10 +311,9 @@ do_status() {
     check_downstream "$HEYPOGI_ROOT/tooling/machine/install-gh-cli.sh" status -q
     check_downstream "$HEYPOGI_ROOT/tooling/skills/install-skills.sh" status -q
     check_downstream "$HEYPOGI_ROOT/tooling/skills/install-ce-skills.sh" status -q
-    check_downstream "$HEYPOGI_ROOT/tooling/skills/install-knowledge-skills.sh" status -q
     # External sources: presence check (the acquire step itself is
     # update-external-repos.sh -f, which converges rather than reports).
-    for src in compound-engineering compound-knowledge opencode; do
+    for src in compound-engineering opencode; do
         if [[ -d "$HEYPOGI_ROOT/external/$src/.git" ]]; then
             log_info "External source present: $src"
         else

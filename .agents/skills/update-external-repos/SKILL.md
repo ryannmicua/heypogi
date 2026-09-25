@@ -7,14 +7,13 @@ description: Use when the user asks to update, refresh, pull, sync, or get the l
 
 ## Overview
 
-This project vendors three external repos under `external/` via standalone clones (not submodules). This skill pulls the latest from all three and keeps the local freshness tracker current.
+This project vendors two external repos under `external/` via standalone clones (not submodules). This skill pulls the latest from both and keeps the local freshness tracker current.
 
 ## External Repositories
 
 | Directory | Remote | URL |
 |---|---|---|
 | `external/compound-engineering/` | origin | https://github.com/EveryInc/compound-engineering-plugin.git |
-| `external/compound-knowledge/` | origin | https://github.com/EveryInc/compound-knowledge-plugin.git |
 | `external/opencode/` | origin | https://github.com/anomalyco/opencode.git |
 
 ## How to Update
@@ -25,7 +24,6 @@ Windows:
 
 ```powershell
 & ".\tooling\sources\clone-ce-source.ps1" -Quiet
-& ".\tooling\sources\clone-knowledge-source.ps1" -Quiet
 & ".\tooling\sources\clone-opencode-source.ps1" -Quiet
 ```
 
@@ -33,7 +31,6 @@ Linux/macOS:
 
 ```bash
 bash tooling/sources/clone-ce-source.sh --quiet
-bash tooling/sources/clone-knowledge-source.sh --quiet
 bash tooling/sources/clone-opencode-source.sh --quiet
 ```
 
@@ -48,7 +45,7 @@ After pulling, check the latest commits and confirm the freshness tracker:
 Windows:
 
 ```powershell
-foreach ($dir in @("compound-engineering", "compound-knowledge", "opencode")) {
+foreach ($dir in @("compound-engineering", "opencode")) {
   $path = ".\external\$dir"
   Write-Host "$dir : $(git -C $path log --oneline -1)"
 }
@@ -59,7 +56,7 @@ foreach ($dir in @("compound-engineering", "compound-knowledge", "opencode")) {
 Linux/macOS:
 
 ```bash
-for dir in compound-engineering compound-knowledge opencode; do
+for dir in compound-engineering opencode; do
   echo "$dir : $(git -C "external/$dir" log --oneline -1)"
 done
 

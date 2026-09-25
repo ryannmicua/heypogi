@@ -27,8 +27,8 @@ Markdown/JSON assets or PowerShell install scripts.
 - `dotfiles/` — machine-level config synced into tool config dirs, notably
   `dotfiles/opencode/` (OpenCode config: `opencode.json`, `agents/`,
   `commands/`) and `dotfiles/paseo/` (Paseo config).
-- `external/` — cloned source repos (OpenCode, compound-engineering,
-  compound-knowledge) used as reference material by subagents; not edited
+- `external/` — cloned source repos (OpenCode and compound-engineering) used as
+  reference material by subagents; not edited
   directly, refreshed via `tooling/sources/clone-*.ps1` scripts.
 - `CONCEPTS.md` — shared domain vocabulary (glossary), accreted by
   `ce-compound` / `ce-compound-refresh`. Read this to understand

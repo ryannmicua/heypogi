@@ -12,7 +12,7 @@ function Show-Help {
   Write-Host ""
   Write-Host "Usage: get-external-repo-status.ps1 [-MaxAgeDays <1-3650>]"
   Write-Host ""
-  Write-Host "Checks compound-engineering, compound-knowledge, and opencode against"
+  Write-Host "Checks compound-engineering and opencode against"
   Write-Host "external/.repo-update-status.json. Exits 1 if any is missing a record or"
   Write-Host "older than -MaxAgeDays (default 7)."
   Write-Host ""
@@ -32,7 +32,7 @@ if ($MaxAgeDays -lt 1 -or $MaxAgeDays -gt 3650) {
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\\..")).Path
 $statusPath = Join-Path $repoRoot "external\\.repo-update-status.json"
-$repositories = @("compound-engineering", "compound-knowledge", "opencode")
+$repositories = @("compound-engineering", "opencode")
 
 if (-not (Test-Path -LiteralPath $statusPath -PathType Leaf)) {
   Write-Host "No external-repository update record exists. Run the update scripts before relying on this status." -ForegroundColor Yellow

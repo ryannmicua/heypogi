@@ -2,7 +2,7 @@
   "tasks": [
     {
       "name": "update-external-repos",
-      "description": "Pull latest from compound-engineering, compound-knowledge, and opencode repos",
+      "description": "Pull latest from compound-engineering and opencode repos",
       "type": "cron",
       "schedule": "0 6 * * *",
       "schedule_human": "daily at 6:00 AM",
