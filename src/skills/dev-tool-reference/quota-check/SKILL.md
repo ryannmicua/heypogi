@@ -14,10 +14,11 @@ providers. Report what the command returns; do not infer missing quota data.
 
 ## Check quotas
 
-Run the default report without delegated credential refresh:
+Run the full report without delegated credential refresh so the 5-hour
+window is included:
 
 ```bash
-npx -y quota-axi --no-credential-refresh
+npx -y quota-axi --full --no-credential-refresh
 ```
 
 This avoids asking a provider CLI to renew an expired session during a routine
@@ -27,13 +28,11 @@ data. Never print or expose credential values.
 If the user asks for specific providers, pass their IDs with `--provider`:
 
 ```bash
-npx -y quota-axi --provider codex,claude --no-credential-refresh
+npx -y quota-axi --provider codex,claude --full --no-credential-refresh
 ```
 
-For more detailed quota windows, pacing, or account evidence, add `--full` only
-when requested or needed to answer the question. Use `--json` when structured
-output is useful for follow-up processing. Use `--tui` only when the user asks
-for an interactive terminal view.
+Use `--json` when structured output is useful for follow-up processing. Use
+`--tui` only when the user asks for an interactive terminal view.
 
 The user may explicitly request a fresh credential-backed check. In that case,
 explain that quota-axi may delegate an expired session's renewal to the
@@ -44,6 +43,9 @@ prompt.
 ## Interpret and report
 
 - State when the report was generated if `generatedAt` is present.
+- Always report each provider's 5-hour window percentage remaining and reset
+  time when quota-axi reports that window. If the 5-hour window is absent or
+  unknown, explicitly say so; never estimate it.
 - Summarize each reported provider's remaining percentage, quota scope/window,
   reset time, runway, and limiting window when available.
 - Distinguish an exhausted quota from missing credentials, unavailable
