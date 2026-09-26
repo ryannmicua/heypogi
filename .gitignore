@@ -31,6 +31,7 @@ tmp/
 # Agent runtimes
 .context7/
 output-html/
+dotfiles/opencode/plugins/moshi-hooks.ts
 
 # External
 external/opencode/
