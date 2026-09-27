@@ -1,5 +1,8 @@
 # Dev Stack Setup — OpenCode, OpenChamber, Paseo
 
+For separately installed personal utilities, see
+[`UTILITIES.md`](UTILITIES.md).
+
 Scripts in `tooling/` follow the repository's [general script standard](../docs/standards/scripts.md). Bash scripts additionally follow the [Bash script standard](../docs/standards/bash-scripts.md).
 Contract details live in the `script-contract` + `bash-script-contract`
 skills (`src/skills/`).
