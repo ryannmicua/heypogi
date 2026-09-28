@@ -10,12 +10,24 @@ param(
   [switch]$Force,
   [switch]$DryRun,
   [switch]$Overwrite,
+  [string]$Lineup,
   [switch]$WipeConfig,
   [Alias("h")]
   [switch]$Help
 )
 
 $ValidCommands = @("status", "install", "update", "fix", "start", "stop", "startup", "sync-profiles", "uninstall", "help")
+$LineupSpecified = $PSBoundParameters.ContainsKey("Lineup")
+if (-not $LineupSpecified) { $Lineup = "default" }
+if ($null -eq $Lineup) {
+  Write-Host "ERROR: -Lineup requires a value (default|codex-only|opencode-only)." -ForegroundColor Red
+  exit 2
+}
+$Lineup = $Lineup.Trim().ToLowerInvariant()
+if ($Lineup -notin @("default", "codex-only", "opencode-only")) {
+  Write-Host "ERROR: Invalid lineup '$Lineup' (want: default|codex-only|opencode-only)." -ForegroundColor Red
+  exit 2
+}
 
 $ErrorActionPreference = "Stop"
 
@@ -698,27 +710,40 @@ function Get-IssueCount {
 }
 
 function Invoke-SyncPaseoProfiles {
-  $catalogPath = Join-Path $PSScriptRoot "..\..\dotfiles\paseo\agent-profiles.json"
+  $catalogPath = Join-Path $PSScriptRoot "../../dotfiles/paseo/agent-profiles.json"
   if (-not (Test-Path -LiteralPath $catalogPath -PathType Leaf)) {
     Write-Host "ERROR: Paseo profile catalog not found at $catalogPath." -ForegroundColor Red
     return 3
   }
-  $catalog = $null
   try {
-    $catalog = @(Get-Content -LiteralPath $catalogPath -Raw | ConvertFrom-Json)
+    $catalogDoc = Get-Content -LiteralPath $catalogPath -Raw | ConvertFrom-Json
   } catch {
     Write-Host "ERROR: Could not parse the Paseo profile catalog: $($_.Exception.Message)" -ForegroundColor Red
     return 1
   }
-  if ($catalog -isnot [System.Array] -or $catalog.Count -eq 0) {
-    Write-Host "ERROR: The Paseo profile catalog must be a non-empty JSON array." -ForegroundColor Red
+  $rootKeys = @($catalogDoc.PSObject.Properties.Name | Sort-Object -CaseSensitive)
+  if ($rootKeys.Count -ne 2 -or $rootKeys[0] -cne "lineups" -or $rootKeys[1] -cne "profiles") {
+    Write-Host "ERROR: The Paseo profile catalog must contain exactly profiles and lineups." -ForegroundColor Red
     return 1
   }
-
+  if ($catalogDoc.profiles -isnot [System.Array] -or $catalogDoc.profiles.Count -eq 0) {
+    Write-Host "ERROR: The profile catalog profiles value must be a non-empty JSON array." -ForegroundColor Red
+    return 1
+  }
+  if ($null -eq $catalogDoc.lineups -or $null -eq $catalogDoc.lineups.PSObject) {
+    Write-Host "ERROR: The profile catalog lineups value must be an object." -ForegroundColor Red
+    return 1
+  }
+  $lineupProperty = $catalogDoc.lineups.PSObject.Properties[$Lineup]
+  if ($null -eq $lineupProperty) {
+    Write-Host "ERROR: Unknown profile lineup '$Lineup'." -ForegroundColor Red
+    return 2
+  }
+  $catalog = @($catalogDoc.profiles)
   $desired = @()
   $catalogNames = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
   foreach ($entry in $catalog) {
-    $keys = @($entry.PSObject.Properties.Name | Sort-Object)
+    $keys = @($entry.PSObject.Properties.Name | Sort-Object -CaseSensitive)
     if ($keys.Count -ne 2 -or $keys[0] -cne "name" -or $keys[1] -cne "notes") {
       Write-Host "ERROR: Every catalog entry must contain only name and notes." -ForegroundColor Red
       return 1
@@ -732,6 +757,55 @@ function Invoke-SyncPaseoProfiles {
       return 1
     }
     $desired += [pscustomobject]@{ name = $entry.name; notes = $entry.notes }
+  }
+
+  $lineup = $lineupProperty.Value
+  if ($null -eq $lineup -or $null -eq $lineup.PSObject) {
+    Write-Host "ERROR: Profile lineup '$Lineup' must be an object." -ForegroundColor Red
+    return 1
+  }
+  $lineupAssignments = @{}
+  foreach ($property in $lineup.PSObject.Properties) {
+    $name = $property.Name
+    if (-not $catalogNames.Contains($name)) {
+      Write-Host "ERROR: Profile lineup '$Lineup' contains unknown profile '$name'." -ForegroundColor Red
+      return 1
+    }
+    $assignment = $property.Value
+    if ($null -eq $assignment -or $null -eq $assignment.PSObject) {
+      Write-Host "ERROR: Lineup assignment for '$name' must be an object." -ForegroundColor Red
+      return 1
+    }
+    $keys = @($assignment.PSObject.Properties.Name | Sort-Object -CaseSensitive)
+    if ($keys.Count -ne 3 -or $keys[0] -cne "model" -or $keys[1] -cne "provider" -or $keys[2] -cne "thinkingOptionId") {
+      Write-Host "ERROR: Lineup assignment for '$name' must contain model, provider, and thinkingOptionId." -ForegroundColor Red
+      return 1
+    }
+    if ($assignment.provider -isnot [string] -or $assignment.provider -notin @("codex", "opencode", "claude")) {
+      Write-Host "ERROR: Lineup assignment for '$name' has an invalid provider." -ForegroundColor Red
+      return 1
+    }
+    if ($assignment.model -isnot [string] -or [string]::IsNullOrWhiteSpace($assignment.model) -or $assignment.model -cne $assignment.model.Trim()) {
+      Write-Host "ERROR: Lineup assignment for '$name' has an invalid model." -ForegroundColor Red
+      return 1
+    }
+    if ($null -ne $assignment.thinkingOptionId -and ($assignment.thinkingOptionId -isnot [string] -or [string]::IsNullOrWhiteSpace($assignment.thinkingOptionId) -or $assignment.thinkingOptionId -cne $assignment.thinkingOptionId.Trim())) {
+      Write-Host "ERROR: Lineup assignment for '$name' has an invalid thinkingOptionId." -ForegroundColor Red
+      return 1
+    }
+    $lineupAssignments[$name.ToLowerInvariant()] = $assignment
+  }
+  if ($lineupAssignments.Count -ne $desired.Count) {
+    Write-Host "ERROR: Profile lineup '$Lineup' must configure every catalog profile exactly once." -ForegroundColor Red
+    return 1
+  }
+  if ($Lineup -eq "codex-only" -and @($lineupAssignments.Values | Where-Object { $_.provider -cne "codex" }).Count -gt 0) {
+    Write-Host "ERROR: The codex-only lineup must use the codex provider for every profile." -ForegroundColor Red
+    return 1
+  }
+  if ($Lineup -eq "opencode-only" -and @($lineupAssignments.Values | Where-Object { $_.provider -cne "opencode" }).Count -gt 0) {
+    Write-Host "ERROR: The opencode-only lineup must use the opencode provider for every profile." -ForegroundColor Red
+    return 1
   }
 
   $currentOutput = @()
@@ -770,11 +844,43 @@ function Invoke-SyncPaseoProfiles {
   }
   $added = New-Object 'System.Collections.Generic.List[string]'
   $updated = New-Object 'System.Collections.Generic.List[string]'
+  $configured = New-Object 'System.Collections.Generic.List[object]'
   $newProfiles = New-Object 'System.Collections.Generic.List[object]'
   $seed = $byName["default"]
   if (-not $seed -or $seed.provider -isnot [string] -or [string]::IsNullOrWhiteSpace($seed.provider)) {
     $seed = $existing | Where-Object { $_.provider -is [string] -and -not [string]::IsNullOrWhiteSpace($_.provider) } | Select-Object -First 1
   }
+  $applyAssignment = {
+    param($ProfileObject, [string]$ProfileName)
+    $assignment = $lineupAssignments[$ProfileName.ToLowerInvariant()]
+    $thinkingProperty = $ProfileObject.PSObject.Properties["thinkingOptionId"]
+    $hasThinking = $null -ne $thinkingProperty
+    $thinkingChanged = $false
+    if ($null -eq $assignment.thinkingOptionId) {
+      $thinkingChanged = $hasThinking
+    } elseif (-not $hasThinking -or $ProfileObject.thinkingOptionId -cne $assignment.thinkingOptionId) {
+      $thinkingChanged = $true
+    }
+    $modelChanged = ($ProfileObject.provider -cne $assignment.provider) -or
+      ($ProfileObject.model -cne $assignment.model) -or $thinkingChanged
+    if ($modelChanged) {
+      $ProfileObject | Add-Member -MemberType NoteProperty -Name provider -Value $assignment.provider -Force
+      $ProfileObject | Add-Member -MemberType NoteProperty -Name model -Value $assignment.model -Force
+      if ($null -eq $assignment.thinkingOptionId) {
+        if ($hasThinking) { $ProfileObject.PSObject.Properties.Remove("thinkingOptionId") }
+      } else {
+        $ProfileObject | Add-Member -MemberType NoteProperty -Name thinkingOptionId -Value $assignment.thinkingOptionId -Force
+      }
+      $effort = if ($null -eq $assignment.thinkingOptionId) { "provider default" } else { $assignment.thinkingOptionId }
+      $configured.Add([pscustomobject]@{
+        name = $ProfileName
+        provider = $assignment.provider
+        model = $assignment.model
+        thinkingOptionId = $effort
+      })
+    }
+  }
+
   foreach ($entry in $desired) {
     $key = $entry.name.ToLowerInvariant()
     if ($byName.ContainsKey($key)) {
@@ -784,6 +890,7 @@ function Invoke-SyncPaseoProfiles {
         $profile | Add-Member -MemberType NoteProperty -Name notes -Value $entry.notes -Force
         $updated.Add($entry.name)
       }
+      & $applyAssignment $profile $entry.name
       continue
     }
     if (-not $seed) {
@@ -794,28 +901,28 @@ function Invoke-SyncPaseoProfiles {
     $profile | Add-Member -MemberType NoteProperty -Name id -Value "agent_profile_$([guid]::NewGuid().ToString('N'))" -Force
     $profile | Add-Member -MemberType NoteProperty -Name name -Value $entry.name -Force
     $profile | Add-Member -MemberType NoteProperty -Name notes -Value $entry.notes -Force
+    & $applyAssignment $profile $entry.name
     $newProfiles.Add($profile)
     $added.Add($entry.name)
   }
   $merged = New-Object 'System.Collections.Generic.List[object]'
   foreach ($profile in $existing) { $merged.Add($profile) }
   foreach ($profile in $newProfiles) { $merged.Add($profile) }
-  $changed = $added.Count -gt 0 -or $updated.Count -gt 0
+  $changed = $added.Count -gt 0 -or $updated.Count -gt 0 -or $configured.Count -gt 0
 
-  $summary = @()
-  if ($added.Count -gt 0) {
-    $summary += "Add missing profiles: $($added -join ', ')"
-  }
+  $summary = @("Selected lineup: $Lineup")
+  if ($added.Count -gt 0) { $summary += "Add missing profiles: $($added -join ', ')" }
   if ($updated.Count -gt 0) { $summary += "Overwrite catalog name/notes: $($updated -join ', ')" }
-  if ($added.Count -gt 0 -and -not $Overwrite) { $summary += "Existing profiles will remain unchanged." }
-  if ($Overwrite -and $changed) { $summary += "Only catalog name/notes change; host-specific settings are preserved." }
-  if (-not $changed) { $summary += "No profile changes are needed." }
+  foreach ($item in $configured) {
+    $summary += "Apply $($item.name): $($item.provider)/$($item.model) (thinking: $($item.thinkingOptionId))"
+  }
+  if (-not $changed) { $summary += "No changes are needed." }
   if ($DryRun) {
     foreach ($line in $summary) { Write-Host "DRY-RUN: $line" }
     return 0
   }
   if (-not $changed) {
-    Write-Host "OK: all catalog Paseo profile names already exist on this host; no changes are needed."
+    Write-Host "OK: Paseo profiles already match the $Lineup lineup."
     return 0
   }
   if (-not $Force) {
@@ -848,8 +955,8 @@ function Invoke-SyncPaseoProfiles {
     return 1
   }
   if (-not $Quiet) { foreach ($line in $setOutput) { Write-Host $line } }
-  $sharedCount = $desired.Count
-  Write-Host "OK: ensured $sharedCount shared Paseo profiles ($($added.Count) added, $($updated.Count) overwritten); host-specific settings were preserved."
+  $configuredCount = $configured.Count
+  Write-Host "OK: synced $($desired.Count) shared Paseo profiles with $Lineup lineup ($($added.Count) added, $($updated.Count) catalog updates, $configuredCount model updates); mode and feature settings were preserved."
   return 0
 }
 
@@ -1356,8 +1463,8 @@ function Show-Help {
   Write-Host "  install  Install or update all tools to latest, then configure autostart + config."
   Write-Host "  update   Alias for install."
   Write-Host "  fix      Auto-fix runtime issues (start services, register autostart, fix config)."
-  Write-Host "  sync-profiles  Ensure catalog profiles exist; -Overwrite updates existing catalog name/notes."
-  Write-Host "                 Provider/model/launch settings stay local; -Force skips the prompt."
+  Write-Host "  sync-profiles  Apply a provider/model lineup to the shared Paseo profiles."
+  Write-Host "                 Defaults to 'default'; -Lineup selects another lineup; -Force skips the prompt."
   Write-Host "  start     Start OpenChamber and the Paseo daemon (if not running)."
   Write-Host "  stop      Stop OpenChamber and the Paseo daemon."
   Write-Host "  startup   Manage autostart-at-login registration only. See below."
@@ -1390,8 +1497,9 @@ function Show-Help {
   Write-Host "                  also auto-accept config-fix confirmation prompts (like -Force,"
   Write-Host "                  but without forcing anything destructive)."
   Write-Host "  -Force          Apply config fixes / skip confirmations without prompting."
-  Write-Host "  -DryRun         With sync-profiles, preview additions/overwrites without writing."
-  Write-Host "  -Overwrite      With sync-profiles, update matching profiles' catalog name and notes."
+  Write-Host "  -DryRun         With sync-profiles, preview profile and model changes without writing."
+  Write-Host "  -Overwrite      With sync-profiles, update matching profile names and notes."
+  Write-Host "  -Lineup <name>  default, codex-only, or opencode-only (default: default)."
   Write-Host "  -WipeConfig     With 'uninstall', also remove the app's config/settings."
   Write-Host ""
   Write-Host "Per-machine preferences (User-scope env vars, not repo config - set once per" -ForegroundColor Cyan
@@ -1413,8 +1521,10 @@ function Show-Help {
   Write-Host "Examples:" -ForegroundColor Cyan
   Write-Host "  .\$exe                  # quick health check"
   Write-Host "  .\$exe fix              # fix whatever is broken"
-  Write-Host "  .\$exe sync-profiles -DryRun  # preview missing Paseo profiles"
-  Write-Host "  .\$exe sync-profiles -Overwrite -DryRun  # preview catalog-field updates"
+  Write-Host "  .\$exe sync-profiles -DryRun  # preview default lineup changes"
+  Write-Host "  .\$exe sync-profiles -Lineup codex-only -DryRun  # preview Codex lineup"
+  Write-Host "  .\$exe sync-profiles -Lineup opencode-only -Force  # apply OpenCode lineup"
+  Write-Host "  .\$exe sync-profiles -Overwrite -DryRun  # preview notes and model updates"
   Write-Host "  .\$exe sync-profiles -Force   # sync without an interactive prompt"
   Write-Host "  .\$exe install -Force   # install/update everything, no prompts"
   Write-Host "  .\$exe install -Quiet   # same, no prompts, plus quieter output"
@@ -1453,6 +1563,10 @@ if ($Command -eq "sync-profiles" -and $SubCommand) {
 }
 if ($Overwrite -and $Command -ne "sync-profiles") {
   Write-Host "-Overwrite is only valid with sync-profiles." -ForegroundColor Red
+  exit 2
+}
+if ($LineupSpecified -and $Command -ne "sync-profiles") {
+  Write-Host "-Lineup is only valid with sync-profiles." -ForegroundColor Red
   exit 2
 }
 if ($Command -eq "sync-profiles" -and $App -and $App.ToLowerInvariant() -notin @("paseo", "paseo-cli")) {

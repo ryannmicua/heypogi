@@ -10,7 +10,7 @@
 #   install      Install or update all tools to latest
 #   update       Alias for install
 #   fix          Auto-fix runtime issues (start services, fix config)
-#   sync-profiles Add missing profiles; optionally overwrite catalog fields
+#   sync-profiles Add profiles and apply a named provider/model lineup
 #   start        Start services
 #   stop         Stop services
 #   restart      Restart services
@@ -26,6 +26,7 @@
 #   --dry-run         Plan only: no writes, no service/network/package
 #                     changes; forwarded to children
 #   --overwrite       With sync-profiles, update existing catalog name/notes
+#   --lineup NAME     With sync-profiles, apply default|codex-only|opencode-only
 #   -h, --help        Show this help
 #
 # Prereqs:
@@ -593,7 +594,7 @@ PYEOF
 
 sync_paseo_profiles() {
     local catalog="$SCRIPT_DIR/../../dotfiles/paseo/agent-profiles.json"
-    local live_json plan profiles_json summary changed shared_count added_count updated_count
+    local live_json plan profiles_json summary changed shared_count added_count updated_count configured_count
     if [[ ! -f "$catalog" ]]; then
         echo_err "Paseo profile catalog not found at $catalog."
         return 3
@@ -620,12 +621,19 @@ try:
 except (OSError, json.JSONDecodeError) as exc:
     raise SystemExit(f"Invalid profile catalog or Paseo config: {exc}")
 overwrite = sys.argv[2] == "true"
+lineup_name = sys.argv[3]
 
-if not isinstance(catalog, list) or not catalog:
-    raise SystemExit("The profile catalog must be a non-empty JSON array.")
+if not isinstance(catalog, dict) or set(catalog) != {"profiles", "lineups"}:
+    raise SystemExit("The profile catalog must contain exactly profiles and lineups.")
+entries = catalog["profiles"]
+lineups = catalog["lineups"]
+if not isinstance(entries, list) or not entries:
+    raise SystemExit("The profile catalog profiles value must be a non-empty JSON array.")
+if not isinstance(lineups, dict) or lineup_name not in lineups:
+    raise SystemExit(f"Unknown profile lineup: {lineup_name}")
 desired = []
 seen = set()
-for index, item in enumerate(catalog):
+for index, item in enumerate(entries):
     if not isinstance(item, dict) or set(item) != {"name", "notes"}:
         raise SystemExit(f"Catalog entry {index + 1} must contain only name and notes.")
     name, notes = item["name"], item["notes"]
@@ -638,6 +646,29 @@ for index, item in enumerate(catalog):
         raise SystemExit(f"Duplicate profile name in catalog: {name}")
     seen.add(key)
     desired.append({"name": name, "notes": notes})
+
+lineup = lineups[lineup_name]
+if not isinstance(lineup, dict):
+    raise SystemExit(f"Profile lineup {lineup_name} must be an object.")
+expected_names = {item["name"].casefold() for item in desired}
+if {name.casefold() for name in lineup} != expected_names:
+    raise SystemExit(f"Profile lineup {lineup_name} must configure every catalog profile exactly once.")
+assignments = {}
+for name, assignment in lineup.items():
+    if not isinstance(name, str) or not isinstance(assignment, dict) or set(assignment) != {"provider", "model", "thinkingOptionId"}:
+        raise SystemExit(f"Profile lineup {lineup_name} has an invalid assignment for {name!r}.")
+    provider, model, thinking = assignment["provider"], assignment["model"], assignment["thinkingOptionId"]
+    if not isinstance(provider, str) or provider not in {"codex", "opencode", "claude"}:
+        raise SystemExit(f"Profile lineup {lineup_name} has an invalid provider for {name}.")
+    if not isinstance(model, str) or not model.strip() or model != model.strip():
+        raise SystemExit(f"Profile lineup {lineup_name} has an invalid model for {name}.")
+    if thinking is not None and (not isinstance(thinking, str) or not thinking.strip() or thinking != thinking.strip()):
+        raise SystemExit(f"Profile lineup {lineup_name} has an invalid thinkingOptionId for {name}.")
+    assignments[name.casefold()] = assignment
+if lineup_name == "codex-only" and any(a["provider"] != "codex" for a in assignments.values()):
+    raise SystemExit("The codex-only lineup must use the codex provider for every profile.")
+if lineup_name == "opencode-only" and any(a["provider"] != "opencode" for a in assignments.values()):
+    raise SystemExit("The opencode-only lineup must use the opencode provider for every profile.")
 
 existing = envelope.get("value") if envelope.get("set") else []
 if existing is None:
@@ -661,7 +692,35 @@ seed = by_name.get("default")
 if seed is None or not isinstance(seed.get("provider"), str) or not seed["provider"]:
     seed = next((profile for profile in merged if isinstance(profile.get("provider"), str) and profile["provider"]), None)
 
-added, updated = [], []
+added, updated, configured = [], [], []
+def apply_assignment(profile, name):
+    assignment = assignments[name.casefold()]
+    before = (
+        profile.get("provider"),
+        profile.get("model"),
+        profile.get("thinkingOptionId"),
+        "thinkingOptionId" in profile,
+    )
+    profile["provider"] = assignment["provider"]
+    profile["model"] = assignment["model"]
+    if assignment["thinkingOptionId"] is None:
+        profile.pop("thinkingOptionId", None)
+    else:
+        profile["thinkingOptionId"] = assignment["thinkingOptionId"]
+    after = (
+        profile.get("provider"),
+        profile.get("model"),
+        profile.get("thinkingOptionId"),
+        "thinkingOptionId" in profile,
+    )
+    if before != after:
+        configured.append({
+            "name": name,
+            "provider": assignment["provider"],
+            "model": assignment["model"],
+            "thinkingOptionId": assignment["thinkingOptionId"],
+        })
+
 for item in desired:
     key, name, notes = item["name"].casefold(), item["name"], item["notes"]
     profile = by_name.get(key)
@@ -670,6 +729,7 @@ for item in desired:
             profile["name"] = name
             profile["notes"] = notes
             updated.append(name)
+        apply_assignment(profile, name)
         continue
     if seed is None:
         raise SystemExit("At least one local profile with a provider is required to seed missing profiles. Create one profile on this host, then run sync-profiles again.")
@@ -677,6 +737,7 @@ for item in desired:
     profile["id"] = "agent_profile_" + uuid.uuid4().hex
     profile["name"] = name
     profile["notes"] = notes
+    apply_assignment(profile, name)
     merged.append(profile)
     by_name[key] = profile
     added.append(name)
@@ -684,13 +745,15 @@ for item in desired:
 # Existing profiles stay in place; missing catalog entries append in catalog order.
 print(json.dumps({
     "profiles": merged,
+    "lineup": lineup_name,
     "added": added,
     "updated": updated,
+    "configured": configured,
     "overwrite": overwrite,
     "catalog_count": len(desired),
-    "changed": bool(added or updated),
+    "changed": bool(added or updated or configured),
 }, separators=(",", ":")))
-' "$catalog" "$OVERWRITE_PROFILES" <<< "$live_json")"; then
+' "$catalog" "$OVERWRITE_PROFILES" "$LINEUP" <<< "$live_json")"; then
         echo_err "Could not build a valid profile sync plan."
         return 1
     fi
@@ -698,16 +761,14 @@ print(json.dumps({
     summary="$(python3 -c '
 import json, sys
 plan = json.load(sys.stdin)
+print("Selected lineup: " + plan["lineup"])
 if plan["added"]:
     print("Add missing profiles: " + ", ".join(plan["added"]))
 if plan["updated"]:
     print("Overwrite catalog name/notes: " + ", ".join(plan["updated"]))
-if plan["added"] and not plan["overwrite"]:
-    print("Existing profiles will remain unchanged.")
-if plan["overwrite"] and plan["changed"]:
-    print("Only catalog name/notes change; host-specific settings are preserved.")
-if not plan["added"] and not plan["updated"]:
-    print("All catalog profiles already exist; existing profiles will remain unchanged.")
+for item in plan["configured"]:
+    effort = item["thinkingOptionId"] if item["thinkingOptionId"] is not None else "provider default"
+    print("Apply {}: {}/{} (thinking: {})".format(item["name"], item["provider"], item["model"], effort))
 if not plan["changed"]:
     print("No changes are needed.")
 ' <<< "$plan")"
@@ -718,9 +779,9 @@ if not plan["changed"]:
     changed="$(python3 -c 'import json,sys; print("true" if json.load(sys.stdin)["changed"] else "false")' <<< "$plan")"
     if [[ "$changed" == false ]]; then
         if [[ "$QUIET" == true ]]; then
-            printf 'OK: all catalog Paseo profile names already exist on this host.\n'
+            printf 'OK: Paseo profiles already match the %s lineup.\n' "$LINEUP"
         else
-            echo_success "All catalog Paseo profile names already exist on this host."
+            echo_success "Paseo profiles already match the $LINEUP lineup."
         fi
         return 0
     fi
@@ -750,10 +811,11 @@ if not plan["changed"]:
     shared_count="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["catalog_count"])' <<< "$plan")"
     added_count="$(python3 -c 'import json,sys; print(len(json.load(sys.stdin)["added"]))' <<< "$plan")"
     updated_count="$(python3 -c 'import json,sys; print(len(json.load(sys.stdin)["updated"]))' <<< "$plan")"
+    configured_count="$(python3 -c 'import json,sys; print(len(json.load(sys.stdin)["configured"]))' <<< "$plan")"
     if [[ "$QUIET" == true ]]; then
-        printf 'OK: ensured %s shared Paseo agent profiles (%s added, %s overwritten); host-specific settings preserved.\n' "$shared_count" "$added_count" "$updated_count"
+        printf 'OK: synced %s shared Paseo profiles with %s lineup (%s added, %s catalog updates, %s model updates).\n' "$shared_count" "$LINEUP" "$added_count" "$updated_count" "$configured_count"
     else
-        echo_success "Ensured $shared_count shared Paseo agent profiles ($added_count added, $updated_count overwritten); host-specific settings were preserved."
+        echo_success "Synced $shared_count shared Paseo profiles with $LINEUP lineup ($added_count added, $updated_count catalog updates, $configured_count model updates); mode and feature settings were preserved."
     fi
 }
 
@@ -1633,9 +1695,9 @@ Commands:
                config seed/merge). Idempotent.
   update       Alias for install
   fix          Auto-fix runtime issues (start services, fix config)
-  sync-profiles Ensure catalog profiles exist; --overwrite updates catalog
-               name/notes on matches. Local launch settings stay host-specific.
-               Prompts before changes; -f skips the prompt.
+  sync-profiles Add catalog profiles and apply a provider/model lineup.
+               Defaults to the default lineup; prompts before changes.
+               --overwrite also updates matching profile names and notes.
   start        Start services
   stop         Stop services
   restart      Restart services
@@ -1650,15 +1712,17 @@ Options:
   -q, --quiet       Suppress non-essential output (never implies consent)
   --dry-run         Plan only, zero writes (forwarded to children)
   --overwrite       With sync-profiles, update existing catalog name/notes
+  --lineup NAME     default, codex-only, or opencode-only (default: default)
   -h, --help        Show this help
 
 Examples:
   ./dev-stack.sh                          # Check status
   ./dev-stack.sh install                  # Install/update all
   ./dev-stack.sh install -a paseo         # Install/update Paseo only
-  ./dev-stack.sh sync-profiles            # Ensure shared Paseo profiles exist
-  ./dev-stack.sh sync-profiles --dry-run  # Preview missing profiles
-  ./dev-stack.sh sync-profiles --overwrite --dry-run # Preview catalog-field updates
+  ./dev-stack.sh sync-profiles            # Apply the default model lineup
+  ./dev-stack.sh sync-profiles --lineup codex-only --dry-run # Preview Codex models
+  ./dev-stack.sh sync-profiles --lineup opencode-only --force # Apply OpenCode models
+  ./dev-stack.sh sync-profiles --overwrite --dry-run # Preview notes and model updates
   ./dev-stack.sh start                    # Start all services
   ./dev-stack.sh stop -a openchamber      # Stop OpenChamber only
   ./dev-stack.sh startup install -a paseo # Install Paseo systemd user service
@@ -1683,6 +1747,8 @@ FORCE=false
 QUIET=false
 DRY_RUN=false
 OVERWRITE_PROFILES=false
+LINEUP=default
+LINEUP_SET=false
 REGISTRY_OK=true
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -1744,6 +1810,21 @@ while [[ $# -gt 0 ]]; do
             DRY_RUN=true; shift ;;
         --overwrite)
             OVERWRITE_PROFILES=true; shift ;;
+        --lineup)
+            if [[ "$LINEUP_SET" == true ]]; then
+                echo_err "--lineup may be supplied only once."
+                exit 2
+            fi
+            if [[ $# -lt 2 || "$2" == -* ]]; then
+                echo_err "Missing value for --lineup (want: default|codex-only|opencode-only)."
+                exit 2
+            fi
+            case "$2" in
+                default|codex-only|opencode-only) LINEUP="$2" ;;
+                *) echo_err "Invalid lineup: $2 (want: default|codex-only|opencode-only)."; exit 2 ;;
+            esac
+            LINEUP_SET=true
+            shift 2 ;;
         -h|--help)
             show_help; exit 0 ;;
         --)
@@ -1785,6 +1866,10 @@ if [[ "$COMMAND" == "sync-profiles" && "$APP" != "all" && "$APP" != "paseo" ]]; 
 fi
 if [[ "$OVERWRITE_PROFILES" == true && "$COMMAND" != "sync-profiles" ]]; then
     echo_err "--overwrite is only valid with sync-profiles."
+    exit 2
+fi
+if [[ "$LINEUP_SET" == true && "$COMMAND" != "sync-profiles" ]]; then
+    echo_err "--lineup is only valid with sync-profiles."
     exit 2
 fi
 
