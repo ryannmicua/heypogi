@@ -113,7 +113,7 @@ Rules: the judge writes exactly one round entry per assessment; `fixes_verified`
 
 ## Realization notes (Paseo / Windows)
 
-- **Provider mapping (default, per orchestration-preferences):** judge = audit role (e.g. minimax-m3, thinking on); babysitter = impl role (e.g. mimo-v2.5, max). Never the same family.
+- **Profile mapping:** use `Review` for the judge and `Implementation` for the babysitter. Read both from Paseo `list_profiles`. When independent model judgment matters, use `Second Opinion` if Review and Implementation resolve to the same model family on this host.
 - The judge does not need to be a parked long-lived agent: a re-spawned judge with the verdict log achieves memory at lower cost. A parked judge is only warranted when rounds are frequent enough to justify it.
 - The babysitter runs `ce-babysit-pr`'s watch loop (Windows adaptations apply: state dir under the pre-approved temp path, `python`-invoked helper, blocking-watch pattern).
 - Copilot review requests: `gh pr edit <N> --add-reviewer "@copilot"` — quote the value on PowerShell (bare `@` is a splatting operator), then verify via GraphQL that `copilot-pull-request-reviewer` is in `reviewRequests` (see request-copilot-code-review).

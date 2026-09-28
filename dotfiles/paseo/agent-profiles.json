@@ -1,0 +1,38 @@
+[
+  {
+    "name": "Default",
+    "notes": "Use when no more specific agent profile fits."
+  },
+  {
+    "name": "Implementation",
+    "notes": "Implement a well-scoped change and report the files changed and evidence."
+  },
+  {
+    "name": "Research",
+    "notes": "Investigate a question, gather evidence, and report findings without changing files unless asked."
+  },
+  {
+    "name": "Planning",
+    "notes": "Clarify requirements, investigate root causes, and compare implementation approaches."
+  },
+  {
+    "name": "Review",
+    "notes": "Independently review changes for correctness, regressions, omissions, and unnecessary complexity."
+  },
+  {
+    "name": "Second Opinion",
+    "notes": "Provide an independent second opinion when a review or decision is contested or high stakes."
+  },
+  {
+    "name": "UI",
+    "notes": "Handle interface design, interaction details, visual polish, and user-facing copy."
+  },
+  {
+    "name": "Vision",
+    "notes": "Analyze images or video and report the visual evidence relevant to the task."
+  },
+  {
+    "name": "Frontier",
+    "notes": "Handle rare, high-value reasoning escalations that need deeper synthesis or judgment."
+  }
+]

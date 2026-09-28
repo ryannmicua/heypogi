@@ -108,7 +108,7 @@ The operator should be able to answer "what's going on?" from your last few mess
 
 - Runs: `~/.miah/runs/<run-id>/` — `journal.jsonl`, `plan-snapshot.v<N>.md`, `units.json`, `manifest.json` (contains the admission-time config snapshot + probe verdicts), `lease.lock`.
 - Config: `~/.miah/config.json` (or `MIAH_CONFIG_HOME`) — thresholds the run was admitted with; a run keeps its admission-time config.
-- Agent model preferences: `~/.paseo/orchestration-preferences.json` — per-role provider/model overrides.
+- Agent profiles: use Paseo `list_profiles` and choose profiles by their shared names and host-local notes. The catalog lives in `dotfiles/paseo/agent-profiles.json`; `sync-profiles` adds missing profiles by default. Its overwrite flag refreshes catalog names and notes while preserving host-specific launch settings.
 - Substrate: the Paseo daemon must be running; `miah start` fails closed if the substrate lacks required mechanisms (e.g. per-agent max-duration) or if global MCP injection is enabled (`~/.paseo/config.json`). If `miah start` refuses, read its findings and relay them — do not bypass.
 
 ## First-run checklist (if no run exists yet)

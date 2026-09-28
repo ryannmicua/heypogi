@@ -207,12 +207,11 @@ paseo --host 192.168.1.10:6767 ls
 | Path | Purpose |
 |------|---------|
 | `~/.paseo/` | Paseo home (override `PASEO_HOME`) |
-| `~/.paseo/config.json` | Configuration |
+| `~/.paseo/config.json` | Configuration, including host-local `daemon.agentProfiles` |
 | `~/.paseo/daemon.log` | Daemon logs |
 | `~/.paseo/agents/<id>.json` | Agent state |
 | `~/.paseo/worktrees/` | Managed worktrees (override `worktrees.root`) |
 | `~/.paseo/paseo.pid` | Daemon PID file |
-| `~/.paseo/orchestration-preferences.json` | Provider preferences for skills |
 
 ### Environment variables
 
@@ -350,18 +349,19 @@ login shell, then restart the daemon.
   issues, provider resolution).
 - **Not checking PATH in a fresh terminal.** The test is: open a brand-new
   terminal and run the command. If it fails there, it will fail in Paseo.
-- **Editing config.json without restarting the daemon.** Changes are only
-  picked up at startup.
+- **Editing config.json without reloading the daemon.** Use `paseo daemon
+  config set` for validated edits; after editing the file directly, run
+  `paseo reload`. Agent profile changes are runtime-safe and do not need a
+  restart.
 - **Using shell aliases/functions as provider commands.** Paseo runs binaries
   directly — `type -a <cmd>` to check if it's an alias.
 - **Confusing paseo skills (orchestrator tools) with paseo itself.** The
   `paseo` skill teaches agents how to use paseo tools. This skill answers
   questions about paseo itself.
-- **Using `opencode-go` as a provider name.** `opencode-go` is a model ID
-  prefix within the `opencode` provider, not a provider itself. The correct
-  format for `paseo_create_agent` is `provider/model` where model can contain
-  slashes (e.g. `opencode/opencode-go/mimo-v2.5`). See
-  `~/.paseo/orchestration-preferences.json` → `role_models` for exact strings.
+- **Using a model ID as the provider.** Profile entries keep provider and model
+  separate. Read the host's agent profiles, then pass the profile's provider
+  and optional model using `provider/model` when creating an agent. A model ID
+  may itself contain slashes.
 
 ## Provider/Model Format for Agent Creation
 
@@ -378,6 +378,11 @@ When using `paseo_create_agent`, the `provider` parameter must be in
 - `opencode-go/minimax-m3` — `opencode-go` is not a configured provider
 - `minimax-m3` — missing provider prefix
 
-**Source of truth:** `~/.paseo/orchestration-preferences.json` → `role_models`
-section maps roles (impl, audit, planning, etc.) to exact provider/model
-strings. Always read this file before creating agents.
+**Source of truth:** the local Paseo host's agent profiles, listed with
+`list_profiles`. Select a profile by its shared name and host-local notes, then
+use its host-specific provider, optional model, and launch settings. Shared
+names are managed from `dotfiles/paseo/agent-profiles.json` with
+`tooling/dev-stack/dev-stack.sh sync-profiles` or
+`tooling/dev-stack/dev-stack.ps1 sync-profiles`. The commands add missing
+profiles by default; pass `--overwrite` / `-Overwrite` to refresh catalog
+names and notes on existing profiles while preserving local launch settings.

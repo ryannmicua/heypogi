@@ -1,9 +1,8 @@
 ---
 name: paseo-delegate
 description: >-
-  Delegate a bounded, fully-specified execution task from a frontier-model
-  orchestrator down to the mimo-v2.5 workhorse (opencode) via Paseo. The
-  reverse of paseo-escalate. Use when the reasoning is already done — the plan
+  Delegate a bounded, fully-specified execution task through the Paseo agent
+  profile named Implementation. The reverse of paseo-escalate. Use when the reasoning is already done — the plan
   or decision is written down — and the remaining work is implementation that a
   less intelligent model can follow. Not for tasks that still need judgment or
   design decisions.
@@ -13,9 +12,9 @@ argument-hint: "[execution task or plan reference to delegate]"
 
 # Delegate to Execution Workhorse
 
-One Paseo agent on **opencode mimo-v2.5 at max reasoning**, fresh context, write-capable. Used when the frontier-model orchestrator has already done the thinking and hands the execution to a cheaper, less intelligent model that can follow the written plan. The delegated agent does the work; the orchestrator reviews and arbitrates.
+One Paseo agent using the Implementation profile, fresh context, write-capable. Used when the orchestrator has already done the thinking and hands off bounded execution. The delegated agent does the work; the orchestrator reviews and arbitrates.
 
-This is the **reverse of `paseo-escalate`**: escalate sends judgment *up* to a frontier model; delegate sends execution *down* to the workhorse.
+This is the **reverse of `paseo-escalate`**: escalate uses Frontier for judgment; delegate uses Implementation for execution.
 
 **User's request:** $ARGUMENTS
 
@@ -23,24 +22,29 @@ This is the **reverse of `paseo-escalate`**: escalate sends judgment *up* to a f
 
 - **Plan is written, implementation is not** — a plan, spec, or decision artifact exists and the remaining work is mechanical: implement it, verify it, done.
 - **Well-bounded implementation** — the task has explicit acceptance criteria, in-scope files, and a defined verify step, with no judgment left to make.
-- **Frontier session, execution volume** — you're operating on a frontier model (codex/gpt-5.6-sol, claude fable/opus) and want to keep cheap execution off your expensive session.
+- **Execution handoff** — the caller has chosen to keep judgment in the current session and delegate bounded implementation to the configured Implementation profile.
 - **Parallelizable chunks** — independent bounded tasks that can run concurrently without conflicting.
 
 Do NOT use when the task still requires reasoning — if writing the brief would force the executor to make a design decision, the thinking is not done. Resolve it first, then delegate.
 
 ## Prerequisites
 
-Read the **paseo** skill. This skill hardcodes the provider and model, so it does **not** read `~/.paseo/orchestration-preferences.json` (per the paseo skill, preferences are skipped when a provider is explicitly named). Honor the preferences' async conventions: `notifyOnFinish=true`, do not poll. Use worktree isolation (`--isolation worktree`) when multiple delegated agents run in parallel on the same repo.
+Read the **paseo** skill. Call `list_profiles`, read each profile's notes,
+and select `Implementation`. Use its host-local provider, model, mode, thinking
+level, and feature settings. The Paseo skill supplies the asynchronous
+creation and notification conventions. Use worktree isolation when multiple
+delegated agents run in parallel on the same repo.
 
 ## Fixed configuration
 
-- Provider: `opencode/opencode-go/mimo-v2.5`
-- Thinking: `max` (`settings.thinkingOptionId = "max"`)
-- Fast mode + auto-accept: `settings: { features: { "fast_mode": true, "auto_accept": true } }`
-- Mode: `build`
+- Provider/model and launch settings: use the selected profile. If it has a
+  provider but no model, discover an available model for that provider.
 - Title: `[Delegate] <topic>`
 
-**Provider routing convention:** This workhorse is a MiMo model, so it stays on `opencode-go`. For any *OpenAI* model, prefer routing via the `codex` provider as `codex/<model>` (e.g. `codex/gpt-5.6-sol`).
+If `Implementation` is missing, tell the user to run the repository's
+`sync-profiles` command (`tooling/dev-stack/dev-stack.sh` or
+`tooling/dev-stack/dev-stack.ps1`) on this host, or choose another local
+profile. Do not substitute a hardcoded provider or model.
 
 ## The delegation brief
 

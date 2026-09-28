@@ -39,6 +39,7 @@ errors are still reported.
 | `update` | Alias for `install`. |
 | `status` (default) | Read-only check of the intended state. Exit code 0 = all good, 1 = issues found, 2 = could not verify (npm offline). |
 | `fix` | Repairs runtime state: restarts stopped daemons, re-registers autostart, fixes listen config to `0.0.0.0` (prompted unless `-Force` or `-Quiet`), then re-verifies. |
+| `sync-profiles` | Explicitly ensures shared Paseo agent profiles exist on this host. By default it leaves existing profiles unchanged; `--overwrite` / `-Overwrite` updates their catalog name and notes. |
 | `start` | Starts OpenChamber + Paseo daemon (no-op if already running). |
 | `stop` | Stops OpenChamber + Paseo daemon. |
 | `startup <verb> [-App <app>]` | Manage autostart-at-login registration per tool (package stays installed). See below. |
@@ -65,6 +66,45 @@ action (stopping daemons, editing config files) unless `-Force` is given.
 `install -Quiet` runs unattended too), but only for non-destructive config
 fixes - the uninstall-time "are you sure" prompts (e.g. `-WipeConfig`) still
 require `-Force`.
+
+## `sync-profiles` - ensure shared Paseo profiles exist
+
+The source is `dotfiles/paseo/agent-profiles.json`. It defines shared profile
+names and notes. Sync adds missing profiles; by default, it leaves existing
+profiles unchanged. `--overwrite` / `-Overwrite` opts into updating existing
+profiles' catalog-owned name and notes.
+
+```powershell
+tooling/dev-stack/dev-stack.ps1 sync-profiles [-DryRun] [-Force] [-Quiet] [-Overwrite]
+```
+
+On Linux, use the Bash entry point and its standard long options:
+
+```bash
+tooling/dev-stack/dev-stack.sh sync-profiles [--dry-run] [--force] [--quiet] [--overwrite]
+```
+
+The command reads the local `daemon.agentProfiles` array through the Paseo
+CLI, matches entries by profile name (case-insensitive), and appends missing
+profiles to the existing array through
+`paseo daemon config set`. Paseo validates the configuration and reloads
+runtime-safe profile changes. The command never runs as part of install or
+fix.
+
+Profiles are matched by name, case-insensitively. Without the overwrite flag,
+existing profiles and their order stay unchanged. With it, sync updates only
+the matching profile's name and notes from the catalog; provider, model, mode,
+thinking, feature settings, and other local fields remain untouched. A new
+catalog entry copies launch settings from the local `Default` profile; if it
+has no provider, the command uses the first local profile with a provider. The
+new profile's name and notes come from the catalog. At least one local profile
+with a provider is required only when missing profiles need to be created.
+Local profiles outside the catalog remain unchanged.
+
+The command previews additions and any requested overwrites, then asks before
+writing. Use `--force` / `-Force` to bypass that prompt. `--dry-run` / `-DryRun`
+prints the planned changes without writing or reloading Paseo. Quiet mode never
+answers the prompt. A no-change sync exits successfully without writing.
 
 ## Per-machine preferences: autostart / firewall opt-out
 

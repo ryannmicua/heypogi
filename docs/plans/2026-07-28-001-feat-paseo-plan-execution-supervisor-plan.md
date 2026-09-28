@@ -342,7 +342,7 @@ stateDiagram-v2
 - `dotfiles/opencode/agents-archive/orchestrator.md` provides the nearest prior supervision, shared-log, and per-task audit pattern.
 - `dotfiles/opencode/agents-archive/auditor.md` provides the nearest prior independent-verdict role.
 - `dotfiles/opencode/agents-archive/builder.md` contains an earlier tracking-file resumption convention.
-- `dotfiles/paseo/orchestration-preferences.json` defines current role-based provider preferences and cross-family audit intent.
+- `dotfiles/paseo/agent-profiles.json` defines shared role names and notes; sync adds missing profiles by default and can overwrite those catalog fields on existing profiles while preserving host launch settings.
 - `dotfiles/opencode/commands/wrapup.md` demonstrates the existing thin-command-to-skill convention.
 - [Paseo CLI documentation](https://paseo.sh/docs/cli) documents local agent lifecycle, logs, waiting, and machine-readable output.
 - [OpenCode provider documentation](https://opencode.ai/docs/providers/) documents provider base-URL overrides and subscription/API provider configuration.
@@ -393,7 +393,7 @@ The CLI exposes setup, start, list, status, resume, stop, inspect, resolve, and 
 
 ### State and Storage Contract
 
-- Repository configuration lives at `.paseo-supervisor/config.json`; explicit run overrides take precedence, then repository defaults. Setup may import role suggestions from `dotfiles/paseo/orchestration-preferences.json` in this repository, but the admitted run manifest is authoritative.
+- Repository configuration lives at `.paseo-supervisor/config.json`; explicit run overrides take precedence, then repository defaults. Setup may import role suggestions from `dotfiles/paseo/agent-profiles.json`, but the admitted run manifest is authoritative.
 - Run control state lives under an owner-only out-of-tree directory, default `~/.paseo-supervisor/runs/<repo-id>/<run-id>/`, keyed by repository identity — NOT under `<git-common-dir>`. Rationale: git worktrees share the common dir and a worker runs as the same OS user, so any in-common-dir path is reachable by sibling worktrees and by the worker; out-of-tree placement keeps normal in-repo agent tooling away from control state. `<repo-id>` is derived from the resolved repository identity (canonical path or remote URL hash) and recorded in the manifest.
 - `manifest.json` records schema versions, repository identity, plan hash, effective limits, provider and audit profiles, rate-card identity, the run worktree, and the pinned Paseo and provider CLI versions; admission and every resume re-validate those pinned versions and treat drift as a blocking configuration change requiring explicit operator re-confirmation of the profile.
 - `plan.snapshot.md` is immutable after admission and verified by content hash before every transition.

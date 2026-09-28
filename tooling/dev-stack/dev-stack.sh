@@ -10,6 +10,7 @@
 #   install      Install or update all tools to latest
 #   update       Alias for install
 #   fix          Auto-fix runtime issues (start services, fix config)
+#   sync-profiles Add missing profiles; optionally overwrite catalog fields
 #   start        Start services
 #   stop         Stop services
 #   restart      Restart services
@@ -24,6 +25,7 @@
 #   -q, --quiet       Suppress non-essential output (never implies consent)
 #   --dry-run         Plan only: no writes, no service/network/package
 #                     changes; forwarded to children
+#   --overwrite       With sync-profiles, update existing catalog name/notes
 #   -h, --help        Show this help
 #
 # Prereqs:
@@ -586,6 +588,172 @@ PYEOF
         mv "$tmp" "$PASEO_LIVE_CONFIG"
         chmod 600 "$PASEO_LIVE_CONFIG"
         echo_success "Paseo config reconciled (listen converged; password/providers/runtime preserved)."
+    fi
+}
+
+sync_paseo_profiles() {
+    local catalog="$SCRIPT_DIR/../../dotfiles/paseo/agent-profiles.json"
+    local live_json plan profiles_json summary changed shared_count added_count updated_count
+    if [[ ! -f "$catalog" ]]; then
+        echo_err "Paseo profile catalog not found at $catalog."
+        return 3
+    fi
+    if ! command -v paseo >/dev/null 2>&1; then
+        echo_err "paseo is required to sync agent profiles and is missing."
+        return 3
+    fi
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo_err "python3 is required to validate and merge the Paseo profile catalog."
+        return 3
+    fi
+    if ! live_json="$(paseo daemon config get daemon.agentProfiles --json)"; then
+        echo_err "Could not read daemon.agentProfiles from the local Paseo instance."
+        return 3
+    fi
+    if ! plan="$(python3 -c '
+import copy, json, sys, uuid
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        catalog = json.load(f)
+    envelope = json.load(sys.stdin)
+except (OSError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"Invalid profile catalog or Paseo config: {exc}")
+overwrite = sys.argv[2] == "true"
+
+if not isinstance(catalog, list) or not catalog:
+    raise SystemExit("The profile catalog must be a non-empty JSON array.")
+desired = []
+seen = set()
+for index, item in enumerate(catalog):
+    if not isinstance(item, dict) or set(item) != {"name", "notes"}:
+        raise SystemExit(f"Catalog entry {index + 1} must contain only name and notes.")
+    name, notes = item["name"], item["notes"]
+    if not isinstance(name, str) or not name.strip() or name != name.strip():
+        raise SystemExit(f"Catalog entry {index + 1} has an invalid name.")
+    if not isinstance(notes, str):
+        raise SystemExit(f"Catalog entry {index + 1} has invalid notes.")
+    key = name.casefold()
+    if key in seen:
+        raise SystemExit(f"Duplicate profile name in catalog: {name}")
+    seen.add(key)
+    desired.append({"name": name, "notes": notes})
+
+existing = envelope.get("value") if envelope.get("set") else []
+if existing is None:
+    existing = []
+if not isinstance(existing, list):
+    raise SystemExit("daemon.agentProfiles is not a JSON array.")
+merged = copy.deepcopy(existing)
+by_name = {}
+seen_existing = set()
+for index, profile in enumerate(merged):
+    if not isinstance(profile, dict) or not isinstance(profile.get("name"), str):
+        raise SystemExit(f"Existing agent profile {index + 1} is not a named object.")
+    name = profile["name"]
+    key = name.casefold()
+    if name.casefold() in seen_existing:
+        raise SystemExit(f"Duplicate profile name on this host: {name}")
+    seen_existing.add(name.casefold())
+    by_name[key] = profile
+
+seed = by_name.get("default")
+if seed is None or not isinstance(seed.get("provider"), str) or not seed["provider"]:
+    seed = next((profile for profile in merged if isinstance(profile.get("provider"), str) and profile["provider"]), None)
+
+added, updated = [], []
+for item in desired:
+    key, name, notes = item["name"].casefold(), item["name"], item["notes"]
+    profile = by_name.get(key)
+    if profile is not None:
+        if overwrite and (profile.get("name") != name or profile.get("notes") != notes):
+            profile["name"] = name
+            profile["notes"] = notes
+            updated.append(name)
+        continue
+    if seed is None:
+        raise SystemExit("At least one local profile with a provider is required to seed missing profiles. Create one profile on this host, then run sync-profiles again.")
+    profile = copy.deepcopy(seed)
+    profile["id"] = "agent_profile_" + uuid.uuid4().hex
+    profile["name"] = name
+    profile["notes"] = notes
+    merged.append(profile)
+    by_name[key] = profile
+    added.append(name)
+
+# Existing profiles stay in place; missing catalog entries append in catalog order.
+print(json.dumps({
+    "profiles": merged,
+    "added": added,
+    "updated": updated,
+    "overwrite": overwrite,
+    "catalog_count": len(desired),
+    "changed": bool(added or updated),
+}, separators=(",", ":")))
+' "$catalog" "$OVERWRITE_PROFILES" <<< "$live_json")"; then
+        echo_err "Could not build a valid profile sync plan."
+        return 1
+    fi
+    profiles_json="$(python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["profiles"], separators=(",", ":")))' <<< "$plan")"
+    summary="$(python3 -c '
+import json, sys
+plan = json.load(sys.stdin)
+if plan["added"]:
+    print("Add missing profiles: " + ", ".join(plan["added"]))
+if plan["updated"]:
+    print("Overwrite catalog name/notes: " + ", ".join(plan["updated"]))
+if plan["added"] and not plan["overwrite"]:
+    print("Existing profiles will remain unchanged.")
+if plan["overwrite"] and plan["changed"]:
+    print("Only catalog name/notes change; host-specific settings are preserved.")
+if not plan["added"] and not plan["updated"]:
+    print("All catalog profiles already exist; existing profiles will remain unchanged.")
+if not plan["changed"]:
+    print("No changes are needed.")
+' <<< "$plan")"
+    if [[ "$DRY_RUN" == true ]]; then
+        while IFS= read -r line; do dry_echo "$line"; done <<< "$summary"
+        return 0
+    fi
+    changed="$(python3 -c 'import json,sys; print("true" if json.load(sys.stdin)["changed"] else "false")' <<< "$plan")"
+    if [[ "$changed" == false ]]; then
+        if [[ "$QUIET" == true ]]; then
+            printf 'OK: all catalog Paseo profile names already exist on this host.\n'
+        else
+            echo_success "All catalog Paseo profile names already exist on this host."
+        fi
+        return 0
+    fi
+    if [[ "$FORCE" != true ]]; then
+        if [[ ! -t 0 ]]; then
+            echo_err "Profile sync needs confirmation in a non-interactive run; pass --force to apply the planned profile changes."
+            return 1
+        fi
+        printf '%s\n' "$summary" >&2
+        printf 'Apply these changes to this Paseo instance? [y/N] ' >&2
+        local answer
+        read -r answer
+        if [[ ! "$answer" =~ ^[Yy]$ ]]; then
+            echo_err "Profile sync declined."
+            return 1
+        fi
+    fi
+    if [[ "$QUIET" == true ]]; then
+        if ! paseo daemon config set daemon.agentProfiles "$profiles_json" --quiet; then
+            echo_err "Paseo did not confirm the profile changes; inspect its output for saved/reload status."
+            return 1
+        fi
+    elif ! paseo daemon config set daemon.agentProfiles "$profiles_json"; then
+        echo_err "Paseo did not confirm the profile changes; inspect its output for saved/reload status."
+        return 1
+    fi
+    shared_count="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["catalog_count"])' <<< "$plan")"
+    added_count="$(python3 -c 'import json,sys; print(len(json.load(sys.stdin)["added"]))' <<< "$plan")"
+    updated_count="$(python3 -c 'import json,sys; print(len(json.load(sys.stdin)["updated"]))' <<< "$plan")"
+    if [[ "$QUIET" == true ]]; then
+        printf 'OK: ensured %s shared Paseo agent profiles (%s added, %s overwritten); host-specific settings preserved.\n' "$shared_count" "$added_count" "$updated_count"
+    else
+        echo_success "Ensured $shared_count shared Paseo agent profiles ($added_count added, $updated_count overwritten); host-specific settings were preserved."
     fi
 }
 
@@ -1465,6 +1633,9 @@ Commands:
                config seed/merge). Idempotent.
   update       Alias for install
   fix          Auto-fix runtime issues (start services, fix config)
+  sync-profiles Ensure catalog profiles exist; --overwrite updates catalog
+               name/notes on matches. Local launch settings stay host-specific.
+               Prompts before changes; -f skips the prompt.
   start        Start services
   stop         Stop services
   restart      Restart services
@@ -1478,12 +1649,16 @@ Options:
   -f, --force       Skip confirmation prompts (declared targets only)
   -q, --quiet       Suppress non-essential output (never implies consent)
   --dry-run         Plan only, zero writes (forwarded to children)
+  --overwrite       With sync-profiles, update existing catalog name/notes
   -h, --help        Show this help
 
 Examples:
   ./dev-stack.sh                          # Check status
   ./dev-stack.sh install                  # Install/update all
   ./dev-stack.sh install -a paseo         # Install/update Paseo only
+  ./dev-stack.sh sync-profiles            # Ensure shared Paseo profiles exist
+  ./dev-stack.sh sync-profiles --dry-run  # Preview missing profiles
+  ./dev-stack.sh sync-profiles --overwrite --dry-run # Preview catalog-field updates
   ./dev-stack.sh start                    # Start all services
   ./dev-stack.sh stop -a openchamber      # Stop OpenChamber only
   ./dev-stack.sh startup install -a paseo # Install Paseo systemd user service
@@ -1507,6 +1682,7 @@ APP="all"
 FORCE=false
 QUIET=false
 DRY_RUN=false
+OVERWRITE_PROFILES=false
 REGISTRY_OK=true
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -1527,7 +1703,7 @@ EXPECT_STARTUP_VERB=false
 COMMAND_SET=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        status|update|start|stop|restart|startup|help)
+        status|update|start|stop|restart|startup|sync-profiles|help)
             if [[ "$EXPECT_STARTUP_VERB" == true ]]; then
                 echo_err "startup requires a subcommand: install, fix, enable, disable, uninstall"
                 exit 2
@@ -1566,6 +1742,8 @@ while [[ $# -gt 0 ]]; do
             QUIET=true; shift ;;
         --dry-run)
             DRY_RUN=true; shift ;;
+        --overwrite)
+            OVERWRITE_PROFILES=true; shift ;;
         -h|--help)
             show_help; exit 0 ;;
         --)
@@ -1601,6 +1779,14 @@ if [[ "$COMMAND" == "startup" && -z "$STARTUP_VERB" ]]; then
     echo_err "startup requires a subcommand: install, fix, enable, disable, uninstall"
     exit 2
 fi
+if [[ "$COMMAND" == "sync-profiles" && "$APP" != "all" && "$APP" != "paseo" ]]; then
+    echo_err "sync-profiles only targets Paseo; omit --app or use --app paseo."
+    exit 2
+fi
+if [[ "$OVERWRITE_PROFILES" == true && "$COMMAND" != "sync-profiles" ]]; then
+    echo_err "--overwrite is only valid with sync-profiles."
+    exit 2
+fi
 
 # Guard: base env must exist (plan-only mode under --dry-run per KTD7).
 # shellcheck disable=SC1091
@@ -1617,6 +1803,9 @@ case "$COMMAND" in
         ;;
     fix)
         do_fix
+        ;;
+    sync-profiles)
+        sync_paseo_profiles
         ;;
     start)
         apps=$(resolve_app_list "$APP")

@@ -154,8 +154,8 @@ Drive the PR from "opened" to a **verified merge-ready verdict** through a three
 | Role | Agent | Authority | Never |
 |---|---|---|---|
 | **Orchestrator** (you) | Session agent | Spawns judge/babysitter, relays verdicts, requests Copilot reviews | Implements fixes directly |
-| **Judge** | minimax-m3 (cross-family from fixer) | Read-only decisions: verdict, fix-list, review-round request | Mutates the PR |
-| **Babysitter** | mimo-v2.5 (impl role) | All mutations: fix commits, push, resolve threads, CI reruns | Deciding merge-readiness |
+| **Judge** | Review profile (cross-family from Implementation when configured) | Read-only decisions: verdict, fix-list, review-round request | Mutates the PR |
+| **Babysitter** | Implementation profile | All mutations: fix commits, push, resolve threads, CI reruns | Deciding merge-readiness |
 | **Copilot** | copilot-pull-request-reviewer[bot] | Primary reviewer; review is the raw material the judge assesses | — |
 
 ### Readiness conditions (ALL must hold)
@@ -208,7 +208,8 @@ If the request does not land (bot not in reviewRequests), retry once. If it stil
 
 ### Step P2.2 — Spawn the babysitter
 
-Create a background agent (mimo-v2.5, build mode, auto-accept) with this brief:
+Create a background agent using the `Implementation` profile. Materialize its
+provider/model and launch settings into the agent request, then use this brief:
 
 ```
 You are the babysitter in a PR Merge-Ready Loop for PR <N> on <OWNER/REPO>.
@@ -243,7 +244,7 @@ After spawning the babysitter, monitor for its output signals. When a signal arr
 **`[NEEDS_JUDGE_ASSESSMENT round=N]`** — Spawn the judge:
 
 1. Read the verdict log and review snapshot
-2. Create a one-shot agent (minimax-m3, plan mode, high thinking) with the judge brief (see Appendix A)
+2. Create a one-shot agent using the `Review` profile and the judge brief (see Appendix A). If it shares a model family with `Implementation`, use `Second Opinion` instead.
 3. Wait for the judge's verdict
 4. Feed the verdict back to the babysitter via `paseo_send_agent_prompt`
 
@@ -326,12 +327,15 @@ REASON: [one-line explanation]
 
 ## Appendix B: Provider Routing
 
-Per orchestration-preferences.json:
+Use the host's synced Paseo agent profiles for model selection:
 
-| Role | Provider | Model | Thinking |
-|---|---|---|---|
-| LFG worker (Phase 1) | opencode | opencode-go/mimo-v2.5 | max |
-| Judge (Phase 2) | opencode | opencode-go/minimax-m3 | high |
-| Babysitter (Phase 2) | opencode | opencode-go/mimo-v2.5 | max |
+| Role | Profile |
+|---|---|
+| LFG worker (Phase 1) | Implementation |
+| Judge (Phase 2) | Review |
+| Babysitter (Phase 2) | Implementation |
 
-Cross-family judge is mandatory — minimax-m3 (audit role) provides genuine contrast from the mimo-v2.5 fixer.
+For independent review, use a different model family from the implementation
+profile when the host has one configured. Use `Second Opinion` when a review
+is contested or needs stronger independent judgment. Provider/model choices
+come from the local profile; they can differ across machines.

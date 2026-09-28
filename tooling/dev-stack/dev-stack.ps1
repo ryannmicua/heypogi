@@ -8,12 +8,14 @@ param(
   [Alias("q")]
   [switch]$Quiet,
   [switch]$Force,
+  [switch]$DryRun,
+  [switch]$Overwrite,
   [switch]$WipeConfig,
   [Alias("h")]
   [switch]$Help
 )
 
-$ValidCommands = @("status", "install", "update", "fix", "start", "stop", "startup", "uninstall", "help")
+$ValidCommands = @("status", "install", "update", "fix", "start", "stop", "startup", "sync-profiles", "uninstall", "help")
 
 $ErrorActionPreference = "Stop"
 
@@ -695,6 +697,162 @@ function Get-IssueCount {
   return @($script:Checks | Where-Object { -not $_.Ok }).Count
 }
 
+function Invoke-SyncPaseoProfiles {
+  $catalogPath = Join-Path $PSScriptRoot "..\..\dotfiles\paseo\agent-profiles.json"
+  if (-not (Test-Path -LiteralPath $catalogPath -PathType Leaf)) {
+    Write-Host "ERROR: Paseo profile catalog not found at $catalogPath." -ForegroundColor Red
+    return 3
+  }
+  $catalog = $null
+  try {
+    $catalog = @(Get-Content -LiteralPath $catalogPath -Raw | ConvertFrom-Json)
+  } catch {
+    Write-Host "ERROR: Could not parse the Paseo profile catalog: $($_.Exception.Message)" -ForegroundColor Red
+    return 1
+  }
+  if ($catalog -isnot [System.Array] -or $catalog.Count -eq 0) {
+    Write-Host "ERROR: The Paseo profile catalog must be a non-empty JSON array." -ForegroundColor Red
+    return 1
+  }
+
+  $desired = @()
+  $catalogNames = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+  foreach ($entry in $catalog) {
+    $keys = @($entry.PSObject.Properties.Name | Sort-Object)
+    if ($keys.Count -ne 2 -or $keys[0] -cne "name" -or $keys[1] -cne "notes") {
+      Write-Host "ERROR: Every catalog entry must contain only name and notes." -ForegroundColor Red
+      return 1
+    }
+    if ($entry.name -isnot [string] -or [string]::IsNullOrWhiteSpace($entry.name) -or $entry.name -cne $entry.name.Trim() -or $entry.notes -isnot [string]) {
+      Write-Host "ERROR: Every catalog profile needs a trimmed name and string notes." -ForegroundColor Red
+      return 1
+    }
+    if (-not $catalogNames.Add($entry.name)) {
+      Write-Host "ERROR: Duplicate profile name in catalog: $($entry.name)" -ForegroundColor Red
+      return 1
+    }
+    $desired += [pscustomobject]@{ name = $entry.name; notes = $entry.notes }
+  }
+
+  $currentOutput = @()
+  try {
+    $currentOutput = @(& paseo daemon config get daemon.agentProfiles --json 2>&1)
+    $getExit = $LASTEXITCODE
+  } catch {
+    Write-Host "ERROR: Could not read daemon.agentProfiles: $($_.Exception.Message)" -ForegroundColor Red
+    return 3
+  }
+  if ($getExit -ne 0) {
+    foreach ($line in $currentOutput) { Write-Host "$line" -ForegroundColor Red }
+    Write-Host "ERROR: Could not read daemon.agentProfiles from the local Paseo instance." -ForegroundColor Red
+    return 3
+  }
+  try {
+    $envelope = ($currentOutput -join "`n") | ConvertFrom-Json
+  } catch {
+    Write-Host "ERROR: Paseo returned invalid JSON for daemon.agentProfiles." -ForegroundColor Red
+    return 3
+  }
+  $existing = @()
+  if ($envelope.set -and $null -ne $envelope.value) { $existing = @($envelope.value) }
+  $byName = @{}
+  foreach ($profile in $existing) {
+    if ($null -eq $profile -or $profile.name -isnot [string]) {
+      Write-Host "ERROR: An existing agent profile is not a named object." -ForegroundColor Red
+      return 1
+    }
+    $key = $profile.name.ToLowerInvariant()
+    if ($byName.ContainsKey($key)) {
+      Write-Host "ERROR: Duplicate profile name on this host: $($profile.name)" -ForegroundColor Red
+      return 1
+    }
+    $byName[$key] = $profile
+  }
+  $added = New-Object 'System.Collections.Generic.List[string]'
+  $updated = New-Object 'System.Collections.Generic.List[string]'
+  $newProfiles = New-Object 'System.Collections.Generic.List[object]'
+  $seed = $byName["default"]
+  if (-not $seed -or $seed.provider -isnot [string] -or [string]::IsNullOrWhiteSpace($seed.provider)) {
+    $seed = $existing | Where-Object { $_.provider -is [string] -and -not [string]::IsNullOrWhiteSpace($_.provider) } | Select-Object -First 1
+  }
+  foreach ($entry in $desired) {
+    $key = $entry.name.ToLowerInvariant()
+    if ($byName.ContainsKey($key)) {
+      $profile = $byName[$key]
+      if ($Overwrite -and ($profile.name -cne $entry.name -or $profile.notes -cne $entry.notes)) {
+        $profile | Add-Member -MemberType NoteProperty -Name name -Value $entry.name -Force
+        $profile | Add-Member -MemberType NoteProperty -Name notes -Value $entry.notes -Force
+        $updated.Add($entry.name)
+      }
+      continue
+    }
+    if (-not $seed) {
+      Write-Host "ERROR: At least one local profile with a provider is required to seed missing profiles. Create one profile on this host, then run sync-profiles again." -ForegroundColor Red
+      return 1
+    }
+    $profile = $seed | ConvertTo-Json -Depth 100 -Compress | ConvertFrom-Json
+    $profile | Add-Member -MemberType NoteProperty -Name id -Value "agent_profile_$([guid]::NewGuid().ToString('N'))" -Force
+    $profile | Add-Member -MemberType NoteProperty -Name name -Value $entry.name -Force
+    $profile | Add-Member -MemberType NoteProperty -Name notes -Value $entry.notes -Force
+    $newProfiles.Add($profile)
+    $added.Add($entry.name)
+  }
+  $merged = New-Object 'System.Collections.Generic.List[object]'
+  foreach ($profile in $existing) { $merged.Add($profile) }
+  foreach ($profile in $newProfiles) { $merged.Add($profile) }
+  $changed = $added.Count -gt 0 -or $updated.Count -gt 0
+
+  $summary = @()
+  if ($added.Count -gt 0) {
+    $summary += "Add missing profiles: $($added -join ', ')"
+  }
+  if ($updated.Count -gt 0) { $summary += "Overwrite catalog name/notes: $($updated -join ', ')" }
+  if ($added.Count -gt 0 -and -not $Overwrite) { $summary += "Existing profiles will remain unchanged." }
+  if ($Overwrite -and $changed) { $summary += "Only catalog name/notes change; host-specific settings are preserved." }
+  if (-not $changed) { $summary += "No profile changes are needed." }
+  if ($DryRun) {
+    foreach ($line in $summary) { Write-Host "DRY-RUN: $line" }
+    return 0
+  }
+  if (-not $changed) {
+    Write-Host "OK: all catalog Paseo profile names already exist on this host; no changes are needed."
+    return 0
+  }
+  if (-not $Force) {
+    if ([Console]::IsInputRedirected) {
+      Write-Host "ERROR: Profile sync needs confirmation in a non-interactive run; pass -Force to apply the planned profile changes." -ForegroundColor Red
+      return 1
+    }
+    foreach ($line in $summary) { Write-Host $line }
+    $choice = Read-Choice -Prompt "Apply these changes to this Paseo instance? [Y]es, [N]o?" -ValidChoices @("Y", "N")
+    if ($choice -ne "Y") {
+      Write-Host "ERROR: Profile sync declined." -ForegroundColor Red
+      return 1
+    }
+  }
+
+  $profileJson = ConvertTo-Json -InputObject $merged.ToArray() -Depth 100 -Compress
+  $setOutput = @()
+  $setArgs = @("daemon", "config", "set", "daemon.agentProfiles", $profileJson)
+  if ($Quiet) { $setArgs += "--quiet" }
+  try {
+    $setOutput = @(& paseo @setArgs 2>&1)
+    $setExit = $LASTEXITCODE
+  } catch {
+    Write-Host "ERROR: Could not apply the profile changes: $($_.Exception.Message)" -ForegroundColor Red
+    return 1
+  }
+  if ($setExit -ne 0) {
+    foreach ($line in $setOutput) { Write-Host "$line" -ForegroundColor Red }
+    Write-Host "ERROR: Paseo did not confirm the profile changes; inspect its output for saved/reload status." -ForegroundColor Red
+    return 1
+  }
+  if (-not $Quiet) { foreach ($line in $setOutput) { Write-Host $line } }
+  $sharedCount = $desired.Count
+  Write-Host "OK: ensured $sharedCount shared Paseo profiles ($($added.Count) added, $($updated.Count) overwritten); host-specific settings were preserved."
+  return 0
+}
+
 # ---------- ensure (idempotent: running + autostart + config) ----------
 function Invoke-Ensure {
   param([string]$App)
@@ -1198,6 +1356,8 @@ function Show-Help {
   Write-Host "  install  Install or update all tools to latest, then configure autostart + config."
   Write-Host "  update   Alias for install."
   Write-Host "  fix      Auto-fix runtime issues (start services, register autostart, fix config)."
+  Write-Host "  sync-profiles  Ensure catalog profiles exist; -Overwrite updates existing catalog name/notes."
+  Write-Host "                 Provider/model/launch settings stay local; -Force skips the prompt."
   Write-Host "  start     Start OpenChamber and the Paseo daemon (if not running)."
   Write-Host "  stop      Stop OpenChamber and the Paseo daemon."
   Write-Host "  startup   Manage autostart-at-login registration only. See below."
@@ -1230,6 +1390,8 @@ function Show-Help {
   Write-Host "                  also auto-accept config-fix confirmation prompts (like -Force,"
   Write-Host "                  but without forcing anything destructive)."
   Write-Host "  -Force          Apply config fixes / skip confirmations without prompting."
+  Write-Host "  -DryRun         With sync-profiles, preview additions/overwrites without writing."
+  Write-Host "  -Overwrite      With sync-profiles, update matching profiles' catalog name and notes."
   Write-Host "  -WipeConfig     With 'uninstall', also remove the app's config/settings."
   Write-Host ""
   Write-Host "Per-machine preferences (User-scope env vars, not repo config - set once per" -ForegroundColor Cyan
@@ -1251,6 +1413,9 @@ function Show-Help {
   Write-Host "Examples:" -ForegroundColor Cyan
   Write-Host "  .\$exe                  # quick health check"
   Write-Host "  .\$exe fix              # fix whatever is broken"
+  Write-Host "  .\$exe sync-profiles -DryRun  # preview missing Paseo profiles"
+  Write-Host "  .\$exe sync-profiles -Overwrite -DryRun  # preview catalog-field updates"
+  Write-Host "  .\$exe sync-profiles -Force   # sync without an interactive prompt"
   Write-Host "  .\$exe install -Force   # install/update everything, no prompts"
   Write-Host "  .\$exe install -Quiet   # same, no prompts, plus quieter output"
   Write-Host "  tooling\bin\heypogi-dev-stack.cmd update -q   # update everything, no prompts"
@@ -1282,6 +1447,18 @@ if ($ValidCommands -notcontains $Command) {
   Show-Help
   exit 1
 }
+if ($Command -eq "sync-profiles" -and $SubCommand) {
+  Write-Host "sync-profiles does not accept a subcommand." -ForegroundColor Red
+  exit 2
+}
+if ($Overwrite -and $Command -ne "sync-profiles") {
+  Write-Host "-Overwrite is only valid with sync-profiles." -ForegroundColor Red
+  exit 2
+}
+if ($Command -eq "sync-profiles" -and $App -and $App.ToLowerInvariant() -notin @("paseo", "paseo-cli")) {
+  Write-Host "sync-profiles only targets Paseo; omit -App or use -App paseo." -ForegroundColor Red
+  exit 2
+}
 
 switch ($Command) {
   "status" {
@@ -1294,6 +1471,10 @@ switch ($Command) {
   "install" { Invoke-Install -App $App }
   "update"  { Invoke-Install -App $App }
   "fix"     { Invoke-Fix -App $App }
+  "sync-profiles" {
+    $syncExit = Invoke-SyncPaseoProfiles
+    exit $syncExit
+  }
   "start"   { Invoke-Start -App $App }
   "stop"    { Invoke-Stop -App $App }
   "startup"   { Invoke-Startup -SubCommand $SubCommand -App $App }
