@@ -67,7 +67,7 @@ action (stopping daemons, editing config files) unless `-Force` is given.
 fixes - the uninstall-time "are you sure" prompts (e.g. `-WipeConfig`) still
 require `-Force`.
 
-## `sync-profiles` - apply a Paseo model lineup
+## `sync-profiles` - apply or capture a Paseo model lineup
 
 The source is `dotfiles/paseo/agent-profiles.json`. It defines shared profile
 names and notes plus three model lineups: `default` (the current mixed-provider
@@ -77,13 +77,13 @@ thinking option clears the profile's current effort setting, which is needed
 for models that do not expose effort choices.
 
 ```powershell
-tooling/dev-stack/dev-stack.ps1 sync-profiles [-Lineup default|codex-only|opencode-only] [-DryRun] [-Force] [-Quiet] [-Overwrite]
+tooling/dev-stack/dev-stack.ps1 sync-profiles [-Lineup NAME | -CaptureLineup NAME] [-DryRun] [-Force] [-Quiet] [-Overwrite]
 ```
 
 On Linux, use the Bash entry point and its standard long options:
 
 ```bash
-tooling/dev-stack/dev-stack.sh sync-profiles [--lineup default|codex-only|opencode-only] [--dry-run] [--force] [--quiet] [--overwrite]
+tooling/dev-stack/dev-stack.sh sync-profiles [--lineup NAME | --capture-lineup NAME] [--dry-run] [--force] [--quiet] [--overwrite]
 ```
 
 When `--lineup` is omitted, sync applies `default`. The command matches local
@@ -93,6 +93,18 @@ settings, ordering, and profiles outside the catalog. Missing profiles are
 seeded from local `Default` (or the first profile with a provider), then receive
 the selected lineup assignment. The command is explicit and does not run as
 part of install or fix.
+
+To save the active Paseo profile models and effort back into one catalog
+lineup, use `--capture-lineup` / `-CaptureLineup`. Capture reads
+`daemon.agentProfiles` through the local Paseo CLI, then updates only the
+selected lineup's provider, model, and `thinkingOptionId` values in
+`dotfiles/paseo/agent-profiles.json`. Profile names, notes, and the other
+lineups stay as they are. Every catalog profile must exist in the active Paseo
+config; `codex-only` and `opencode-only` captures also require all profiles to
+use that provider. Capture previews changes and asks before writing. Use
+`--force` / `-Force` to skip the prompt or `--dry-run` / `-DryRun` to preview
+without writing. `--capture-lineup` cannot be combined with `--lineup` or
+`--overwrite`.
 
 `--overwrite` / `-Overwrite` additionally updates catalog names and notes on
 matching profiles. The command previews every addition, name/note update, and
@@ -106,6 +118,8 @@ Examples:
     tooling/dev-stack/dev-stack.sh sync-profiles --dry-run
     tooling/dev-stack/dev-stack.sh sync-profiles --lineup codex-only --dry-run
     tooling/dev-stack/dev-stack.sh sync-profiles --lineup opencode-only --force
+    tooling/dev-stack/dev-stack.sh sync-profiles --capture-lineup default --dry-run
+    tooling/dev-stack/dev-stack.sh sync-profiles --capture-lineup default --force
 
 ## Per-machine preferences: autostart / firewall opt-out
 

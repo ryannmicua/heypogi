@@ -27,6 +27,7 @@
 #                     changes; forwarded to children
 #   --overwrite       With sync-profiles, update existing catalog name/notes
 #   --lineup NAME     With sync-profiles, apply default|codex-only|opencode-only
+#   --capture-lineup NAME  Capture active Paseo settings into a catalog lineup
 #   -h, --help        Show this help
 #
 # Prereqs:
@@ -816,6 +817,201 @@ if not plan["changed"]:
         printf 'OK: synced %s shared Paseo profiles with %s lineup (%s added, %s catalog updates, %s model updates).\n' "$shared_count" "$LINEUP" "$added_count" "$updated_count" "$configured_count"
     else
         echo_success "Synced $shared_count shared Paseo profiles with $LINEUP lineup ($added_count added, $updated_count catalog updates, $configured_count model updates); mode and feature settings were preserved."
+    fi
+}
+
+capture_paseo_lineup() {
+    local catalog="$SCRIPT_DIR/../../dotfiles/paseo/agent-profiles.json"
+    local live_json plan summary changed catalog_json catalog_hash
+    if [[ ! -f "$catalog" ]]; then
+        echo_err "Paseo profile catalog not found at $catalog."
+        return 3
+    fi
+    if ! command -v paseo >/dev/null 2>&1; then
+        echo_err "paseo is required to capture agent profile settings and is missing."
+        return 3
+    fi
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo_err "python3 is required to validate and update the Paseo profile catalog."
+        return 3
+    fi
+    if ! live_json="$(paseo daemon config get daemon.agentProfiles --json)"; then
+        echo_err "Could not read daemon.agentProfiles from the local Paseo instance."
+        return 3
+    fi
+    if ! plan="$(python3 -c '
+import copy, hashlib, json, sys
+
+try:
+    with open(sys.argv[1], "rb") as f:
+        catalog_bytes = f.read()
+    catalog = json.loads(catalog_bytes)
+    envelope = json.load(sys.stdin)
+except (OSError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"Invalid profile catalog or Paseo config: {exc}")
+lineup_name = sys.argv[2]
+if not isinstance(catalog, dict) or set(catalog) != {"profiles", "lineups"}:
+    raise SystemExit("The profile catalog must contain exactly profiles and lineups.")
+entries = catalog["profiles"]
+lineups = catalog["lineups"]
+if not isinstance(entries, list) or not entries or not isinstance(lineups, dict) or lineup_name not in lineups:
+    raise SystemExit(f"Unknown or invalid profile lineup: {lineup_name}")
+desired = []
+catalog_names = set()
+for index, entry in enumerate(entries):
+    if not isinstance(entry, dict) or set(entry) != {"name", "notes"}:
+        raise SystemExit(f"Catalog entry {index + 1} must contain only name and notes.")
+    name = entry["name"]
+    if not isinstance(name, str) or not name.strip() or name != name.strip() or not isinstance(entry["notes"], str):
+        raise SystemExit(f"Catalog entry {index + 1} has an invalid name.")
+    key = name.casefold()
+    if key in catalog_names:
+        raise SystemExit(f"Duplicate profile name in catalog: {name}")
+    catalog_names.add(key)
+    desired.append(name)
+lineup = lineups[lineup_name]
+if not isinstance(lineup, dict):
+    raise SystemExit(f"Profile lineup {lineup_name} must be an object.")
+target_by_name = {}
+target_names = {}
+for name, assignment in lineup.items():
+    key = name.casefold()
+    if key in target_by_name:
+        raise SystemExit(f"Duplicate profile name in lineup {lineup_name}: {name}")
+    if not isinstance(assignment, dict) or set(assignment) != {"provider", "model", "thinkingOptionId"}:
+        raise SystemExit(f"Lineup assignment for {name} must contain provider, model, and thinkingOptionId.")
+    if not isinstance(assignment["provider"], str) or assignment["provider"] not in {"codex", "opencode", "claude"}:
+        raise SystemExit(f"Lineup assignment for {name} has an invalid provider.")
+    if not isinstance(assignment["model"], str) or not assignment["model"].strip() or assignment["model"] != assignment["model"].strip():
+        raise SystemExit(f"Lineup assignment for {name} has an invalid model.")
+    thinking = assignment["thinkingOptionId"]
+    if thinking is not None and (not isinstance(thinking, str) or not thinking.strip() or thinking != thinking.strip()):
+        raise SystemExit(f"Lineup assignment for {name} has an invalid thinkingOptionId.")
+    target_by_name[key] = assignment
+    target_names[key] = name
+if set(target_by_name) != catalog_names:
+    raise SystemExit(f"Profile lineup {lineup_name} must configure every catalog profile exactly once.")
+if not isinstance(envelope, dict) or not isinstance(envelope.get("set"), bool):
+    raise SystemExit("Paseo returned an unexpected daemon.agentProfiles response.")
+existing = envelope.get("value") if envelope["set"] else []
+if not isinstance(existing, list):
+    raise SystemExit("daemon.agentProfiles is not a JSON array.")
+by_name = {}
+for index, profile in enumerate(existing):
+    if not isinstance(profile, dict) or not isinstance(profile.get("name"), str):
+        raise SystemExit(f"Existing agent profile {index + 1} is not a named object.")
+    key = profile["name"].casefold()
+    if key in by_name:
+        raise SystemExit("Duplicate profile name on this host: " + profile["name"])
+    by_name[key] = profile
+current = {}
+for name in desired:
+    profile = by_name.get(name.casefold())
+    if profile is None:
+        raise SystemExit(f"Active Paseo config is missing catalog profile: {name}")
+    provider, model = profile.get("provider"), profile.get("model")
+    thinking = profile.get("thinkingOptionId")
+    if not isinstance(provider, str) or provider not in {"codex", "opencode", "claude"}:
+        raise SystemExit(f"Active profile {name} has an invalid provider.")
+    if not isinstance(model, str) or not model.strip() or model != model.strip():
+        raise SystemExit(f"Active profile {name} has an invalid model.")
+    if thinking is not None and (not isinstance(thinking, str) or not thinking.strip() or thinking != thinking.strip()):
+        raise SystemExit(f"Active profile {name} has an invalid thinkingOptionId.")
+    current[name.casefold()] = {
+        "provider": provider,
+        "model": model,
+        "thinkingOptionId": thinking,
+    }
+if lineup_name == "codex-only" and any(a["provider"] != "codex" for a in current.values()):
+    raise SystemExit("Cannot capture mixed-provider settings into codex-only.")
+if lineup_name == "opencode-only" and any(a["provider"] != "opencode" for a in current.values()):
+    raise SystemExit("Cannot capture mixed-provider settings into opencode-only.")
+updated = copy.deepcopy(catalog)
+changes = []
+for name in desired:
+    assignment = current[name.casefold()]
+    previous = target_by_name[name.casefold()]
+    if any(previous.get(key) != value for key, value in assignment.items()):
+        changes.append({"name": name, **assignment})
+    updated["lineups"][lineup_name][target_names[name.casefold()]] = assignment
+print(json.dumps({
+    "lineup": lineup_name,
+    "changed": bool(changes),
+    "changes": changes,
+    "catalog_sha256": hashlib.sha256(catalog_bytes).hexdigest(),
+    "catalog_json": json.dumps(updated, ensure_ascii=False, indent=2) + "\n",
+}, separators=(",", ":")))
+' "$catalog" "$CAPTURE_LINEUP" <<< "$live_json")"; then
+        echo_err "Could not build a valid capture plan."
+        return 1
+    fi
+    summary="$(python3 -c '
+import json, sys
+plan = json.load(sys.stdin)
+print("Capture active Paseo settings into lineup: " + plan["lineup"])
+for item in plan["changes"]:
+    effort = item["thinkingOptionId"] if item["thinkingOptionId"] is not None else "provider default"
+    print("Update {}: {}/{} (thinking: {})".format(item["name"], item["provider"], item["model"], effort))
+if not plan["changed"]:
+    print("The lineup already matches active Paseo settings.")
+' <<< "$plan")"
+    if [[ "$DRY_RUN" == true ]]; then
+        while IFS= read -r line; do dry_echo "$line"; done <<< "$summary"
+        return 0
+    fi
+    changed="$(python3 -c 'import json,sys; print("true" if json.load(sys.stdin)["changed"] else "false")' <<< "$plan")"
+    if [[ "$changed" == false ]]; then
+        if [[ "$QUIET" == true ]]; then
+            printf 'OK: %s lineup already matches active Paseo settings.\n' "$CAPTURE_LINEUP"
+        else
+            echo_success "$CAPTURE_LINEUP lineup already matches active Paseo settings."
+        fi
+        return 0
+    fi
+    if [[ "$FORCE" != true ]]; then
+        if [[ ! -t 0 ]]; then
+            echo_err "Catalog capture needs confirmation in a non-interactive run; pass --force to write the planned lineup changes."
+            return 1
+        fi
+        printf '%s\n' "$summary" >&2
+        printf 'Write these lineup changes to the repo catalog? [y/N] ' >&2
+        local answer
+        read -r answer
+        if [[ ! "$answer" =~ ^[Yy]$ ]]; then
+            echo_err "Profile lineup capture declined."
+            return 1
+        fi
+    fi
+    catalog_json="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["catalog_json"], end="")' <<< "$plan")"
+    catalog_hash="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["catalog_sha256"])' <<< "$plan")"
+    if ! python3 -c '
+import hashlib, os, stat, sys, tempfile
+path, expected_hash, content = sys.argv[1], sys.argv[2], sys.stdin.read()
+with open(path, "rb") as source:
+    if hashlib.sha256(source.read()).hexdigest() != expected_hash:
+        raise SystemExit("The catalog changed after preview; run capture again.")
+directory = os.path.dirname(os.path.abspath(path))
+mode = stat.S_IMODE(os.stat(path).st_mode)
+fd, temporary = tempfile.mkstemp(prefix=".agent-profiles.", suffix=".tmp", dir=directory)
+try:
+    with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as stream:
+        stream.write(content)
+    os.chmod(temporary, mode)
+    os.replace(temporary, path)
+except BaseException:
+    try:
+        os.unlink(temporary)
+    except FileNotFoundError:
+        pass
+    raise
+' "$catalog" "$catalog_hash" <<< "$catalog_json"; then
+        echo_err "Could not atomically write the Paseo profile catalog."
+        return 1
+    fi
+    if [[ "$QUIET" == true ]]; then
+        printf 'OK: captured active Paseo models and effort into %s lineup.\n' "$CAPTURE_LINEUP"
+    else
+        echo_success "Captured active Paseo models and effort into $CAPTURE_LINEUP lineup."
     fi
 }
 
@@ -1712,7 +1908,8 @@ Options:
   -q, --quiet       Suppress non-essential output (never implies consent)
   --dry-run         Plan only, zero writes (forwarded to children)
   --overwrite       With sync-profiles, update existing catalog name/notes
-  --lineup NAME     default, codex-only, or opencode-only (default: default)
+  --lineup NAME     Apply default, codex-only, or opencode-only (default: default)
+  --capture-lineup NAME  Capture active Paseo models/effort into that lineup
   -h, --help        Show this help
 
 Examples:
@@ -1722,6 +1919,7 @@ Examples:
   ./dev-stack.sh sync-profiles            # Apply the default model lineup
   ./dev-stack.sh sync-profiles --lineup codex-only --dry-run # Preview Codex models
   ./dev-stack.sh sync-profiles --lineup opencode-only --force # Apply OpenCode models
+  ./dev-stack.sh sync-profiles --capture-lineup default --dry-run # Preview catalog capture
   ./dev-stack.sh sync-profiles --overwrite --dry-run # Preview notes and model updates
   ./dev-stack.sh start                    # Start all services
   ./dev-stack.sh stop -a openchamber      # Stop OpenChamber only
@@ -1749,6 +1947,8 @@ DRY_RUN=false
 OVERWRITE_PROFILES=false
 LINEUP=default
 LINEUP_SET=false
+CAPTURE_LINEUP=""
+CAPTURE_LINEUP_SET=false
 REGISTRY_OK=true
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -1825,6 +2025,21 @@ while [[ $# -gt 0 ]]; do
             esac
             LINEUP_SET=true
             shift 2 ;;
+        --capture-lineup)
+            if [[ "$CAPTURE_LINEUP_SET" == true ]]; then
+                echo_err "--capture-lineup may be supplied only once."
+                exit 2
+            fi
+            if [[ $# -lt 2 || "$2" == -* ]]; then
+                echo_err "Missing value for --capture-lineup (want: default|codex-only|opencode-only)."
+                exit 2
+            fi
+            case "$2" in
+                default|codex-only|opencode-only) CAPTURE_LINEUP="$2" ;;
+                *) echo_err "Invalid lineup: $2 (want: default|codex-only|opencode-only)."; exit 2 ;;
+            esac
+            CAPTURE_LINEUP_SET=true
+            shift 2 ;;
         -h|--help)
             show_help; exit 0 ;;
         --)
@@ -1872,6 +2087,18 @@ if [[ "$LINEUP_SET" == true && "$COMMAND" != "sync-profiles" ]]; then
     echo_err "--lineup is only valid with sync-profiles."
     exit 2
 fi
+if [[ "$CAPTURE_LINEUP_SET" == true && "$COMMAND" != "sync-profiles" ]]; then
+    echo_err "--capture-lineup is only valid with sync-profiles."
+    exit 2
+fi
+if [[ "$CAPTURE_LINEUP_SET" == true && "$LINEUP_SET" == true ]]; then
+    echo_err "--capture-lineup and --lineup cannot be combined."
+    exit 2
+fi
+if [[ "$CAPTURE_LINEUP_SET" == true && "$OVERWRITE_PROFILES" == true ]]; then
+    echo_err "--overwrite cannot be combined with --capture-lineup."
+    exit 2
+fi
 
 # Guard: base env must exist (plan-only mode under --dry-run per KTD7).
 # shellcheck disable=SC1091
@@ -1890,7 +2117,11 @@ case "$COMMAND" in
         do_fix
         ;;
     sync-profiles)
-        sync_paseo_profiles
+        if [[ "$CAPTURE_LINEUP_SET" == true ]]; then
+            capture_paseo_lineup
+        else
+            sync_paseo_profiles
+        fi
         ;;
     start)
         apps=$(resolve_app_list "$APP")

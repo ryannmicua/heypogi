@@ -11,6 +11,7 @@ param(
   [switch]$DryRun,
   [switch]$Overwrite,
   [string]$Lineup,
+  [string]$CaptureLineup,
   [switch]$WipeConfig,
   [Alias("h")]
   [switch]$Help
@@ -18,6 +19,7 @@ param(
 
 $ValidCommands = @("status", "install", "update", "fix", "start", "stop", "startup", "sync-profiles", "uninstall", "help")
 $LineupSpecified = $PSBoundParameters.ContainsKey("Lineup")
+$CaptureLineupSpecified = $PSBoundParameters.ContainsKey("CaptureLineup")
 if (-not $LineupSpecified) { $Lineup = "default" }
 if ($null -eq $Lineup) {
   Write-Host "ERROR: -Lineup requires a value (default|codex-only|opencode-only)." -ForegroundColor Red
@@ -27,6 +29,17 @@ $Lineup = $Lineup.Trim().ToLowerInvariant()
 if ($Lineup -notin @("default", "codex-only", "opencode-only")) {
   Write-Host "ERROR: Invalid lineup '$Lineup' (want: default|codex-only|opencode-only)." -ForegroundColor Red
   exit 2
+}
+if ($CaptureLineupSpecified) {
+  if ($null -eq $CaptureLineup) {
+    Write-Host "ERROR: -CaptureLineup requires a value (default|codex-only|opencode-only)." -ForegroundColor Red
+    exit 2
+  }
+  $CaptureLineup = $CaptureLineup.Trim().ToLowerInvariant()
+  if ($CaptureLineup -notin @("default", "codex-only", "opencode-only")) {
+    Write-Host "ERROR: Invalid capture lineup '$CaptureLineup' (want: default|codex-only|opencode-only)." -ForegroundColor Red
+    exit 2
+  }
 }
 
 $ErrorActionPreference = "Stop"
@@ -960,6 +973,266 @@ function Invoke-SyncPaseoProfiles {
   return 0
 }
 
+function Invoke-CapturePaseoLineup {
+  $catalogPath = Join-Path $PSScriptRoot "../../dotfiles/paseo/agent-profiles.json"
+  if (-not (Test-Path -LiteralPath $catalogPath -PathType Leaf)) {
+    Write-Host "ERROR: Paseo profile catalog not found at $catalogPath." -ForegroundColor Red
+    return 3
+  }
+  try {
+    $catalogBytes = [System.IO.File]::ReadAllBytes($catalogPath)
+    $catalogDoc = [System.Text.Encoding]::UTF8.GetString($catalogBytes) | ConvertFrom-Json
+  } catch {
+    Write-Host "ERROR: Could not parse the Paseo profile catalog: $($_.Exception.Message)" -ForegroundColor Red
+    return 1
+  }
+  $rootKeys = @($catalogDoc.PSObject.Properties.Name | Sort-Object -CaseSensitive)
+  if ($rootKeys.Count -ne 2 -or $rootKeys[0] -cne "lineups" -or $rootKeys[1] -cne "profiles") {
+    Write-Host "ERROR: The Paseo profile catalog must contain exactly profiles and lineups." -ForegroundColor Red
+    return 1
+  }
+  if ($catalogDoc.profiles -isnot [System.Array] -or $catalogDoc.profiles.Count -eq 0) {
+    Write-Host "ERROR: The profile catalog profiles value must be a non-empty JSON array." -ForegroundColor Red
+    return 1
+  }
+  if ($null -eq $catalogDoc.lineups -or $null -eq $catalogDoc.lineups.PSObject) {
+    Write-Host "ERROR: The profile catalog lineups value must be an object." -ForegroundColor Red
+    return 1
+  }
+  $lineupProperty = $catalogDoc.lineups.PSObject.Properties[$CaptureLineup]
+  if ($null -eq $lineupProperty) {
+    Write-Host "ERROR: Unknown profile lineup '$CaptureLineup'." -ForegroundColor Red
+    return 2
+  }
+
+  $desired = @()
+  $catalogNames = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+  foreach ($entry in @($catalogDoc.profiles)) {
+    $keys = @($entry.PSObject.Properties.Name | Sort-Object -CaseSensitive)
+    if ($keys.Count -ne 2 -or $keys[0] -cne "name" -or $keys[1] -cne "notes") {
+      Write-Host "ERROR: Every catalog entry must contain only name and notes." -ForegroundColor Red
+      return 1
+    }
+    if ($entry.name -isnot [string] -or [string]::IsNullOrWhiteSpace($entry.name) -or $entry.name -cne $entry.name.Trim() -or $entry.notes -isnot [string]) {
+      Write-Host "ERROR: Every catalog profile needs a trimmed name and string notes." -ForegroundColor Red
+      return 1
+    }
+    if (-not $catalogNames.Add($entry.name)) {
+      Write-Host "ERROR: Duplicate profile name in catalog: $($entry.name)" -ForegroundColor Red
+      return 1
+    }
+    $desired += $entry.name
+  }
+
+  $targetLineup = $lineupProperty.Value
+  if ($null -eq $targetLineup -or $null -eq $targetLineup.PSObject) {
+    Write-Host "ERROR: Profile lineup '$CaptureLineup' must be an object." -ForegroundColor Red
+    return 1
+  }
+  $targetAssignments = @{}
+  foreach ($property in $targetLineup.PSObject.Properties) {
+    $name = $property.Name
+    if (-not $catalogNames.Contains($name)) {
+      Write-Host "ERROR: Profile lineup '$CaptureLineup' contains unknown profile '$name'." -ForegroundColor Red
+      return 1
+    }
+    $assignment = $property.Value
+    if ($null -eq $assignment -or $null -eq $assignment.PSObject) {
+      Write-Host "ERROR: Lineup assignment for '$name' must be an object." -ForegroundColor Red
+      return 1
+    }
+    $keys = @($assignment.PSObject.Properties.Name | Sort-Object -CaseSensitive)
+    if ($keys.Count -ne 3 -or $keys[0] -cne "model" -or $keys[1] -cne "provider" -or $keys[2] -cne "thinkingOptionId") {
+      Write-Host "ERROR: Lineup assignment for '$name' must contain model, provider, and thinkingOptionId." -ForegroundColor Red
+      return 1
+    }
+    if ($assignment.provider -isnot [string] -or $assignment.provider -notin @("codex", "opencode", "claude")) {
+      Write-Host "ERROR: Lineup assignment for '$name' has an invalid provider." -ForegroundColor Red
+      return 1
+    }
+    if ($assignment.model -isnot [string] -or [string]::IsNullOrWhiteSpace($assignment.model) -or $assignment.model -cne $assignment.model.Trim()) {
+      Write-Host "ERROR: Lineup assignment for '$name' has an invalid model." -ForegroundColor Red
+      return 1
+    }
+    if ($null -ne $assignment.thinkingOptionId -and ($assignment.thinkingOptionId -isnot [string] -or [string]::IsNullOrWhiteSpace($assignment.thinkingOptionId) -or $assignment.thinkingOptionId -cne $assignment.thinkingOptionId.Trim())) {
+      Write-Host "ERROR: Lineup assignment for '$name' has an invalid thinkingOptionId." -ForegroundColor Red
+      return 1
+    }
+    $key = $name.ToLowerInvariant()
+    if ($targetAssignments.ContainsKey($key)) {
+      Write-Host "ERROR: Duplicate profile name in lineup '$CaptureLineup': $name" -ForegroundColor Red
+      return 1
+    }
+    $targetAssignments[$key] = $assignment
+  }
+  if ($targetAssignments.Count -ne $desired.Count) {
+    Write-Host "ERROR: Profile lineup '$CaptureLineup' must configure every catalog profile exactly once." -ForegroundColor Red
+    return 1
+  }
+
+  $currentOutput = @()
+  try {
+    $currentOutput = @(& paseo daemon config get daemon.agentProfiles --json 2>&1)
+    $getExit = $LASTEXITCODE
+  } catch {
+    Write-Host "ERROR: Could not read daemon.agentProfiles: $($_.Exception.Message)" -ForegroundColor Red
+    return 3
+  }
+  if ($getExit -ne 0) {
+    foreach ($line in $currentOutput) { Write-Host "$line" -ForegroundColor Red }
+    Write-Host "ERROR: Could not read daemon.agentProfiles from the local Paseo instance." -ForegroundColor Red
+    return 3
+  }
+  try {
+    $envelope = ($currentOutput -join "`n") | ConvertFrom-Json
+  } catch {
+    Write-Host "ERROR: Paseo returned invalid JSON for daemon.agentProfiles." -ForegroundColor Red
+    return 3
+  }
+  if ($null -eq $envelope -or $null -eq $envelope.PSObject.Properties["set"] -or $null -eq $envelope.PSObject.Properties["value"] -or $envelope.set -isnot [bool]) {
+    Write-Host "ERROR: Paseo returned an unexpected daemon.agentProfiles response." -ForegroundColor Red
+    return 3
+  }
+  $existing = @()
+  if ($envelope.set) {
+    if ($envelope.value -isnot [System.Array]) {
+      Write-Host "ERROR: daemon.agentProfiles is not a JSON array." -ForegroundColor Red
+      return 1
+    }
+    $existing = @($envelope.value)
+  }
+  $byName = @{}
+  foreach ($profile in $existing) {
+    if ($null -eq $profile -or $profile.name -isnot [string]) {
+      Write-Host "ERROR: An existing agent profile is not a named object." -ForegroundColor Red
+      return 1
+    }
+    $key = $profile.name.ToLowerInvariant()
+    if ($byName.ContainsKey($key)) {
+      Write-Host "ERROR: Duplicate profile name on this host: $($profile.name)" -ForegroundColor Red
+      return 1
+    }
+    $byName[$key] = $profile
+  }
+
+  $currentAssignments = @{}
+  foreach ($name in $desired) {
+    $key = $name.ToLowerInvariant()
+    if (-not $byName.ContainsKey($key)) {
+      Write-Host "ERROR: Active Paseo config is missing catalog profile: $name" -ForegroundColor Red
+      return 1
+    }
+    $profile = $byName[$key]
+    $provider = $profile.provider
+    $model = $profile.model
+    $thinkingProperty = $profile.PSObject.Properties["thinkingOptionId"]
+    $thinking = if ($null -eq $thinkingProperty) { $null } else { $thinkingProperty.Value }
+    if ($provider -isnot [string] -or $provider -notin @("codex", "opencode", "claude")) {
+      Write-Host "ERROR: Active profile '$name' has an invalid provider." -ForegroundColor Red
+      return 1
+    }
+    if ($model -isnot [string] -or [string]::IsNullOrWhiteSpace($model) -or $model -cne $model.Trim()) {
+      Write-Host "ERROR: Active profile '$name' has an invalid model." -ForegroundColor Red
+      return 1
+    }
+    if ($null -ne $thinking -and ($thinking -isnot [string] -or [string]::IsNullOrWhiteSpace($thinking) -or $thinking -cne $thinking.Trim())) {
+      Write-Host "ERROR: Active profile '$name' has an invalid thinkingOptionId." -ForegroundColor Red
+      return 1
+    }
+    $currentAssignments[$key] = [pscustomobject]@{
+      provider = $provider
+      model = $model
+      thinkingOptionId = $thinking
+    }
+  }
+  if ($CaptureLineup -eq "codex-only" -and @($currentAssignments.Values | Where-Object { $_.provider -cne "codex" }).Count -gt 0) {
+    Write-Host "ERROR: Cannot capture mixed-provider settings into codex-only." -ForegroundColor Red
+    return 1
+  }
+  if ($CaptureLineup -eq "opencode-only" -and @($currentAssignments.Values | Where-Object { $_.provider -cne "opencode" }).Count -gt 0) {
+    Write-Host "ERROR: Cannot capture mixed-provider settings into opencode-only." -ForegroundColor Red
+    return 1
+  }
+
+  $changes = New-Object 'System.Collections.Generic.List[object]'
+  foreach ($name in $desired) {
+    $key = $name.ToLowerInvariant()
+    $before = $targetAssignments[$key]
+    $after = $currentAssignments[$key]
+    if ($before.provider -cne $after.provider -or $before.model -cne $after.model -or $before.thinkingOptionId -cne $after.thinkingOptionId) {
+      $changes.Add([pscustomobject]@{
+        name = $name
+        provider = $after.provider
+        model = $after.model
+        thinkingOptionId = $after.thinkingOptionId
+      })
+    }
+    $targetLineup.PSObject.Properties[$name].Value = [pscustomobject]@{
+      provider = $after.provider
+      model = $after.model
+      thinkingOptionId = $after.thinkingOptionId
+    }
+  }
+
+  $summary = @("Capture active Paseo settings into lineup: $CaptureLineup")
+  foreach ($item in $changes) {
+    $effort = if ($null -eq $item.thinkingOptionId) { "provider default" } else { $item.thinkingOptionId }
+    $summary += "Update $($item.name): $($item.provider)/$($item.model) (thinking: $effort)"
+  }
+  if ($changes.Count -eq 0) { $summary += "The lineup already matches active Paseo settings." }
+  if ($DryRun) {
+    foreach ($line in $summary) { Write-Host "DRY-RUN: $line" }
+    return 0
+  }
+  if ($changes.Count -eq 0) {
+    Write-Host "OK: $CaptureLineup lineup already matches active Paseo settings."
+    return 0
+  }
+  if (-not $Force) {
+    if ([Console]::IsInputRedirected) {
+      Write-Host "ERROR: Catalog capture needs confirmation in a non-interactive run; pass -Force to write the planned lineup changes." -ForegroundColor Red
+      return 1
+    }
+    foreach ($line in $summary) { Write-Host $line }
+    $choice = Read-Choice -Prompt "Write these lineup changes to the repo catalog? [Y]es, [N]o?" -ValidChoices @("Y", "N")
+    if ($choice -ne "Y") {
+      Write-Host "ERROR: Profile lineup capture declined." -ForegroundColor Red
+      return 1
+    }
+  }
+
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    $expectedHash = [System.BitConverter]::ToString($sha.ComputeHash($catalogBytes)).Replace("-", "").ToLowerInvariant()
+  } finally {
+    $sha.Dispose()
+  }
+  $catalogJson = ConvertTo-Json -InputObject $catalogDoc -Depth 100
+  $catalogDirectory = Split-Path -LiteralPath $catalogPath -Parent
+  $temporaryPath = Join-Path $catalogDirectory (".agent-profiles.$([guid]::NewGuid().ToString('N')).tmp")
+  try {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+      $currentHash = [System.BitConverter]::ToString($sha.ComputeHash([System.IO.File]::ReadAllBytes($catalogPath))).Replace("-", "").ToLowerInvariant()
+    } finally {
+      $sha.Dispose()
+    }
+    if ($currentHash -cne $expectedHash) {
+      Write-Host "ERROR: The catalog changed after preview; run capture again." -ForegroundColor Red
+      return 1
+    }
+    [System.IO.File]::WriteAllText($temporaryPath, $catalogJson + [Environment]::NewLine, (New-Object System.Text.UTF8Encoding $false))
+    [System.IO.File]::Replace($temporaryPath, $catalogPath, $null)
+  } catch {
+    Write-Host "ERROR: Could not atomically write the Paseo profile catalog: $($_.Exception.Message)" -ForegroundColor Red
+    return 1
+  } finally {
+    if (Test-Path -LiteralPath $temporaryPath) { Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue }
+  }
+  Write-Host "OK: captured active Paseo models and effort into $CaptureLineup lineup."
+  return 0
+}
+
 # ---------- ensure (idempotent: running + autostart + config) ----------
 function Invoke-Ensure {
   param([string]$App)
@@ -1464,7 +1737,8 @@ function Show-Help {
   Write-Host "  update   Alias for install."
   Write-Host "  fix      Auto-fix runtime issues (start services, register autostart, fix config)."
   Write-Host "  sync-profiles  Apply a provider/model lineup to the shared Paseo profiles."
-  Write-Host "                 Defaults to 'default'; -Lineup selects another lineup; -Force skips the prompt."
+  Write-Host "                 Defaults to 'default'; -Lineup selects another lineup."
+  Write-Host "                 -CaptureLineup copies active Paseo models/effort into that catalog lineup."
   Write-Host "  start     Start OpenChamber and the Paseo daemon (if not running)."
   Write-Host "  stop      Stop OpenChamber and the Paseo daemon."
   Write-Host "  startup   Manage autostart-at-login registration only. See below."
@@ -1500,6 +1774,7 @@ function Show-Help {
   Write-Host "  -DryRun         With sync-profiles, preview profile and model changes without writing."
   Write-Host "  -Overwrite      With sync-profiles, update matching profile names and notes."
   Write-Host "  -Lineup <name>  default, codex-only, or opencode-only (default: default)."
+  Write-Host "  -CaptureLineup <name>  Capture active Paseo models/effort into a catalog lineup."
   Write-Host "  -WipeConfig     With 'uninstall', also remove the app's config/settings."
   Write-Host ""
   Write-Host "Per-machine preferences (User-scope env vars, not repo config - set once per" -ForegroundColor Cyan
@@ -1524,6 +1799,7 @@ function Show-Help {
   Write-Host "  .\$exe sync-profiles -DryRun  # preview default lineup changes"
   Write-Host "  .\$exe sync-profiles -Lineup codex-only -DryRun  # preview Codex lineup"
   Write-Host "  .\$exe sync-profiles -Lineup opencode-only -Force  # apply OpenCode lineup"
+  Write-Host "  .\$exe sync-profiles -CaptureLineup default -DryRun  # preview catalog capture"
   Write-Host "  .\$exe sync-profiles -Overwrite -DryRun  # preview notes and model updates"
   Write-Host "  .\$exe sync-profiles -Force   # sync without an interactive prompt"
   Write-Host "  .\$exe install -Force   # install/update everything, no prompts"
@@ -1569,6 +1845,18 @@ if ($LineupSpecified -and $Command -ne "sync-profiles") {
   Write-Host "-Lineup is only valid with sync-profiles." -ForegroundColor Red
   exit 2
 }
+if ($CaptureLineupSpecified -and $Command -ne "sync-profiles") {
+  Write-Host "-CaptureLineup is only valid with sync-profiles." -ForegroundColor Red
+  exit 2
+}
+if ($CaptureLineupSpecified -and $LineupSpecified) {
+  Write-Host "-CaptureLineup and -Lineup cannot be combined." -ForegroundColor Red
+  exit 2
+}
+if ($CaptureLineupSpecified -and $Overwrite) {
+  Write-Host "-Overwrite cannot be combined with -CaptureLineup." -ForegroundColor Red
+  exit 2
+}
 if ($Command -eq "sync-profiles" -and $App -and $App.ToLowerInvariant() -notin @("paseo", "paseo-cli")) {
   Write-Host "sync-profiles only targets Paseo; omit -App or use -App paseo." -ForegroundColor Red
   exit 2
@@ -1586,7 +1874,11 @@ switch ($Command) {
   "update"  { Invoke-Install -App $App }
   "fix"     { Invoke-Fix -App $App }
   "sync-profiles" {
-    $syncExit = Invoke-SyncPaseoProfiles
+    if ($CaptureLineupSpecified) {
+      $syncExit = Invoke-CapturePaseoLineup
+    } else {
+      $syncExit = Invoke-SyncPaseoProfiles
+    }
     exit $syncExit
   }
   "start"   { Invoke-Start -App $App }
