@@ -5,8 +5,8 @@
 #            status/install; helpers take -f/-q/--dry-run directly).
 # Purpose:   Ensure the OpenCode source checkout exists at external/opencode/
 #            (clone on first run, pull latest only with -f/--force or
-#            interactive approval). Called before the CE/knowledge skill
-#            installers by bootstrap/bootstrap.sh (R26 ordering).
+#            interactive approval). Called before the CE skill installer
+#            by bootstrap/bootstrap.sh (R26 ordering).
 # Usage:     clone-opencode-source.sh [-f|--force] [-q|--quiet] [--dry-run] [-h|--help]
 #
 # Managed state: external/opencode/ git checkout (+ freshness ledger via

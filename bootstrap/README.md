@@ -34,7 +34,8 @@ Running `bootstrap.sh` executes, in env-first order:
 4. **AI agent CLIs** — `install-{claude,codex,gh}-cli.sh install`
 5. **External sources** — `update-external-repos.sh -f` (before skills)
 6. **Dev Stack** — `dev-stack.sh install` (incl. additive Paseo seed)
-7. **Skills** — `install-{skills,ce-skills,knowledge-skills}.sh install --create-dest`
+7. **Skills** — `install-skills.sh install --create-dest` and
+   `install-ce-skills.sh install --create-dest`
 8. **Startup + start** — `dev-stack.sh startup install -a paseo` (legacy
    migration, linger, allowlist) then `start -a paseo`
 9. **Marker** — appends `ISO8601-ts | user | repo-root | git-sha | args | exit-code`

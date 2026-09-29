@@ -5,8 +5,8 @@
 #            status/install; helpers take -f/-q/--dry-run directly).
 # Purpose:   Ensure the Compound Engineering source checkout exists at external/compound-engineering/
 #            (clone on first run, pull latest only with -f/--force or
-#            interactive approval). Called before the CE/knowledge skill
-#            installers by bootstrap/bootstrap.sh (R26 ordering).
+#            interactive approval). Called before the CE skill installer
+#            by bootstrap/bootstrap.sh (R26 ordering).
 # Usage:     clone-ce-source.sh [-f|--force] [-q|--quiet] [--dry-run] [-h|--help]
 #
 # Managed state: external/compound-engineering/ git checkout (+ freshness ledger via

@@ -19,7 +19,7 @@ markers, and `status` aggregation. All install logic lives here, in
 | `env/` | `setup-env.sh` (+ `require-env.sh` sourced guard) | `~/.config/heypogi/.env-{common,override,secrets}`, `.bashrc` marker block; every dependent gates on the guard before mutating |
 | `machine/` | `check-prereqs.sh`, `install-{claude,codex,gh}-cli.sh` | System checks (node/npm/curl/git/docker/uv/AVX) + CLI installers; narrow sudo for apt only |
 | `sources/` | `clone-*.sh` via `update-external-repos.sh` | `external/` checkouts, acquired before skills; failures propagate |
-| `skills/` | `install-{skills,ce-skills,knowledge-skills}.sh` | `~/.agents/skills/*` symlinks (correct link = no-op; conflicting dirs never removed) |
+| `skills/` | `install-{skills,ce-skills}.sh` | `~/.agents/skills/*` symlinks (correct link = no-op; conflicting dirs never removed) |
 | `bin/` | `userspace-shims.sh` (+ PATH entry points) | `~/.local/bin`, `~/.local/node-bin`, npm prefix, CLI shims the rootless unit needs |
 | `dev-stack/` | `dev-stack.sh` (+ `paseo.service` user-unit template) | Paseo config seed (additive, password-preserving merge), rootless user unit, legacy system-unit migration, linger ownership, fail-closed bind, `~/.config/heypogi/.env-paseo` secrets allowlist |
 
@@ -171,9 +171,7 @@ rootless unit).
 
 Doc–script pairs share filenames in those folders; each doc documents its own
 script. Entry points: [`sources/clone-ce-source.md`](sources/clone-ce-source.md),
-[`sources/clone-knowledge-source.md`](sources/clone-knowledge-source.md),
 [`sources/clone-opencode-source.md`](sources/clone-opencode-source.md),
 [`skills/install-skills.md`](skills/install-skills.md),
 [`skills/install-ce-skills.md`](skills/install-ce-skills.md),
-[`skills/install-knowledge-skills.md`](skills/install-knowledge-skills.md),
 [`skills/install-opencode-learn.md`](skills/install-opencode-learn.md).

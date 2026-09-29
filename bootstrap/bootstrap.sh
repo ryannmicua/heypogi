@@ -18,7 +18,7 @@
 #   setup-env install -> check-prereqs install -> userspace-shims
 #   install -> install-{claude,codex,gh} install -> external sources
 #   acquire -> dev-stack install (incl. Paseo additive seed) ->
-#   skills install-* -> dev-stack startup install + start -> marker.
+#   repo + CE skills -> dev-stack startup install + start -> marker.
 #
 # Flag mapping (R25, exhaustive):
 #   --skip-agents    skips install-{claude,codex,gh} only.
@@ -348,6 +348,8 @@ do_preflight() {
     #    reconverges content/perms/marker block. Uses exec_as_target (not
     #    as_target): this check is read-only, so it executes for real
     #    even under --dry-run.
+    # Keep these expansions in the target user's shell environment.
+    # shellcheck disable=SC2016
     if ! exec_as_target bash -c 'd="$HOME/.config/heypogi"; [[ -f "$d/.env-common" && -f "$d/.env-secrets" ]]'; then
         log_err "Preflight: heypogi env files are not set up for $TARGET_USER."
         log_err "Remediation (once, as $TARGET_USER): bash $HEYPOGI_ROOT/tooling/env/setup-env.sh install"
@@ -359,6 +361,8 @@ do_preflight() {
     #    its password must exist before the startup/start steps; the
     #    leaves would only fail closed there (exit 3 deep into the run).
     if [[ "$SKIP_PASEO" == false && "$SKIP_SERVICES" == false ]]; then
+        # Keep these expansions in the target user's shell environment.
+        # shellcheck disable=SC2016
         if ! exec_as_target bash -c '[[ -n "${PASEO_PASSWORD:-}" ]] && exit 0; f="$HOME/.config/heypogi/.env-secrets"; [[ -f "$f" ]] && grep -qE "^PASEO_PASSWORD=.+" "$f"'; then
             log_err "Preflight: PASEO_PASSWORD is not set for $TARGET_USER, but this run starts Paseo."
             log_err "Remediation: set PASEO_PASSWORD in ~$TARGET_USER/.config/heypogi/.env-secrets, then re-run bootstrap."
@@ -482,9 +486,6 @@ do_install() {
         "$HEYPOGI_ROOT/tooling/skills/install-skills.sh" install --create-dest || return $?
     run_child "Step 5b: CE skills" \
         "$HEYPOGI_ROOT/tooling/skills/install-ce-skills.sh" install --create-dest || return $?
-    run_child "Step 5c: knowledge skills" \
-        "$HEYPOGI_ROOT/tooling/skills/install-knowledge-skills.sh" install --create-dest || return $?
-
     # Step 6: user-unit startup + start (R25: skipped by --skip-services
     # or --skip-paseo).
     if [[ "$SKIP_SERVICES" == false && "$SKIP_PASEO" == false ]]; then
