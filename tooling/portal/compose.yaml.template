@@ -1,0 +1,19 @@
+# Homarr host portal. Copy to <HOMARR_DIR>/compose.yaml (see homarr.md).
+# <HOMARR_DIR> is kept outside any repository, e.g. ~/.local/share/homarr.
+services:
+  homarr:
+    # Pin by digest; the tag is only a label for humans.
+    image: ghcr.io/homarr-labs/homarr@sha256:<IMAGE_DIGEST> # v<HOMARR_VERSION>
+    container_name: homarr
+    restart: unless-stopped
+    environment:
+      # 64 hex characters, from `openssl rand -hex 32`, kept in <HOMARR_DIR>/.env (mode 0600).
+      # Losing it makes stored integration secrets unreadable; back it up with the data.
+      SECRET_ENCRYPTION_KEY: ${SECRET_ENCRYPTION_KEY}
+    ports:
+      # Publish on loopback and the private overlay address only; never 0.0.0.0.
+      - "127.0.0.1:7575:7575"
+      - "<OVERLAY_IP>:7575:7575"
+    volumes:
+      - ./appdata:/appdata
+    # No Docker socket mount: the portal lists links and does not discover containers.

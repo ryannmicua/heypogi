@@ -142,6 +142,7 @@ rootless unit).
 |--------|----------|
 | [`dev-stack/`](dev-stack/) | Always-on dev services (OpenCode, OpenChamber, Paseo): Linux supervisor `dev-stack.sh` + `paseo.service` user-unit template, Windows `dev-stack.ps1` + per-tool ctl scripts and docs, `openchamber.settings.json` template |
 | [`machine/`](machine/) | Provisioning this box: Linux `check-prereqs.sh` + `install-{claude,codex,gh}-cli.sh`, PowerShell profile, GitHub App agent identity (`github-app-identity.sh`, token CLI, credential helper, config template) |
+| [`portal/`](portal/) | Host link portal (Homarr in Docker Compose): compose template and the setup, agent-key, backup, and upgrade guide |
 | [`env/`](env/) | heypogi env owner: `setup-env.sh`, `require-env.sh` sourced guard, templates |
 | [`sources/`](sources/) | External reference repos: clone scripts, status/recording helpers |
 | [`skills/`](skills/) | Installing skill collections into the agent environment |
@@ -166,6 +167,12 @@ rootless unit).
 | [`machine/setup-environment.md`](machine/setup-environment.md) | Sets `HEYPOGI_ROOT` / `OPENCODE_CONFIG_DIR`, writes PowerShell profiles |
 | [`machine/install-codex-cli.md`](machine/install-codex-cli.md) | Installs/verifies Codex CLI and Linux Bubblewrap/AppArmor prerequisites |
 | [`machine/github-app-identity.md`](machine/github-app-identity.md) | GitHub App as the agent GitHub/git identity: token CLI, credential helper, commit attribution |
+
+### `portal/`
+
+| Doc | Covers |
+|-----|--------|
+| [`portal/homarr.md`](portal/homarr.md) | Homarr portal: private bind, first run, narrow agent API key, agent operation, backup, upgrade |
 
 ### `sources/` and `skills/`
 

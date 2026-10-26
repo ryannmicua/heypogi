@@ -19,6 +19,7 @@ External dependencies required for heypogi to work.
 | **gh** (GitHub CLI) | `winget install GitHub.cli` | PR operations, status checks, repo interactions |
 | **sqlite3** | `winget install SQLite.SQLite` | Query opencode-learn SQLite DB |
 | **jq** | `winget install jqlang.jq` | JSON processing in shell scripts |
+| **Docker + Compose** (Linux) | Distribution packages | Runs the Homarr host portal (`tooling/portal/homarr.md`) |
 
 ## npm packages
 
