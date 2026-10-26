@@ -88,17 +88,24 @@ its own group, and `admin` is granted only for the minute it takes to create the
 1. **Group** (Manage → Users → Groups → New group, e.g. `agents`). Permissions:
    `app-create`, `app-use-all`, `app-modify-all`, `app-full-all`.
    `app-full-all` is what allows deleting an app; `app-modify-all` alone is refused on delete.
+   Do not grant `admin` or `board-modify-all`; board access is per board (step 5).
 2. **User** (Manage → Users → New user, e.g. `agent`) with a generated password,
    member of that group. Append it to `<CRED_FILE>` as `HOMARR_AGENT_USER` and `HOMARR_AGENT_PASSWORD`.
 3. Temporarily add `admin` to the group, sign in as `agent`, and create a key
    under Manage → Tools → API → Authentication. The key is shown once.
    Append it to `<CRED_FILE>` as `HOMARR_AGENT_API_KEY` (mode 0600), then
    remove `admin` from the group again.
-4. Verify the key is narrow (see below). Never put these values in a repository,
+4. **Board access**: as the administrator, open the board's settings
+   (`/boards/<BOARD_NAME>/settings`, Access control → Groups), add the `agents` group
+   with permission *Modify board*, and save. This lets the key read the board and add,
+   move, and remove its items, and nothing more (no rename, visibility, or delete,
+   which need *Full access*). Repeat for each board agents should manage.
+5. Verify the key is narrow (see below). Never put these values in a repository,
    report, status line, or PR.
 
-The key can read, create, modify, and delete apps. It cannot manage users,
-invites, boards, or settings; those calls return `403`.
+The key can read, create, modify, and delete apps, and edit the items on boards
+granted in step 4. It cannot manage users, invites, settings, or create boards;
+those calls return `403`.
 
 ## Agent operation
 
@@ -116,11 +123,8 @@ curl -s -H "$H" -X DELETE <BASE>/api/apps/<ID>
 
 - `pingUrl` is required on create (use `""`), and `PATCH` needs the full body,
   not only the changed field.
-- An app in the catalog does not appear on the dashboard until it is an item on
-  a board. That needs board permissions, which the agent lacks by design: an
-  administrator adds it once in the UI (edit board → add app), or temporarily
-  grants `admin` and calls `POST /api/boards/items` with
-  `{"boardId":"<BOARD_ID>","kind":"app","options":{"appId":"<ID>"},"size":{"width":3,"height":2}}`.
+- An app in the catalog does not appear on the dashboard until it is an item on a
+  board. With board access (see above) the agent places it itself; see "Board items".
 - The full machine-readable reference is `<BASE>/api/openapi`.
 - MCP clients use the endpoint `<BASE>/api/mcp` with the same header:
 
@@ -132,7 +136,35 @@ curl -s -H "$H" -X DELETE <BASE>/api/apps/<ID>
 
 Check scope after any permission change: `GET /api/users`, `GET /api/invites`, and
 `POST /api/boards` with the agent key must return `403`, while create, patch, and
-delete of a throwaway app succeed.
+delete of a throwaway app, and add, move, and remove of its board item, succeed.
+
+## Board items
+
+`<BOARD_ID>` and the layout ids come from the board read; the REST API has no board
+read or item delete, so those use the tRPC and content endpoints below.
+
+```bash
+# Read a board: sections, items, layouts (layout role "base" = desktop, "mobile")
+curl -s -H "$H" -G <BASE>/api/trpc/board.getBoardByName \
+  --data-urlencode 'input={"json":{"name":"<BOARD_NAME>"}}'
+# Add an app item (the app must exist; appId must be non-empty)
+curl -s -H "$H" -H "$J" -X POST <BASE>/api/boards/items -d \
+  '{"boardId":"<BOARD_ID>","kind":"app","options":{"appId":"<APP_ID>"},"size":{"width":2,"height":2}}'
+# Move or resize on one layout
+curl -s -H "$H" -H "$J" -X PATCH <BASE>/api/boards/<BOARD_ID>/items/<ITEM_ID>/layouts/<LAYOUT_ID> -d \
+  '{"xOffset":0,"yOffset":0,"width":2,"height":2}'
+# Remove items, create or rename groups: PUT the whole board content
+curl -s -H "$H" -H "$J" -X PUT <BASE>/api/boards/<BOARD_ID>/content -d '{"sections":[...],"items":[...]}'
+```
+
+- `PUT .../content` replaces everything: read the board first, change the `sections`
+  and `items` from that read, and send them back. To remove an item, leave it out;
+  deleting an app from the catalog does not remove its board item.
+- A group is a `container` section with `options.title` and one `layouts` entry per
+  board layout (`layoutId`, offsets, size, `parentSectionId` = the board's `empty`
+  section). Items in a group use that section's id as their `sectionId`, with offsets
+  relative to the group.
+- New items land in the first free spot; PATCH them into place.
 
 ## Adding links
 
